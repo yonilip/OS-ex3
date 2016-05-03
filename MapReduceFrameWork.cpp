@@ -63,7 +63,7 @@ vector<IN_ITEM> inputVec;
 /**
  * pointer to the cur place in inputVec
  */
-int index;
+int inputVecUpperIndex;
 
 /**
  * mutex for threadMap
@@ -86,13 +86,15 @@ pthread_cond_t conditionVar;
 pthread_mutex_t* timerMutex;
 
 //pthread_mutex_t inputVecUpperIndexMutex;
-shared_ptr<pthread_mutex_t> inputVecUpperIndexMutex;
+pthread_mutex_t* inputVecUpperIndexMutex;
 
 /**
  * output of shuffle function
  */
 map<k2Base*, list<v2Base>*> shuffleMap;
 
+
+IN_ITEMS_LIST* itemsListGlobal;
 
 /**
  *
@@ -205,23 +207,29 @@ void *shuffle(void*)
 
 
 /**
- *
+ * Execution of Map() for each pThread
+ * locks the global upper index of the input Vec and assigns lower and upper
+ * bounds and update the global inputVecUpperIndex += CHUNK
+ * for each index in the bound activate map()
+ * when done notify the conditional shuffle thread
  */
-void* execMap(void*)
+void execMap(void*)
 {
+	unsigned long lowerBound, upperBound;
 
-	// lock index of inputVec, increase index by CHUNK.
-	pthread_mutex_lock((pthread_mutex_t*)inputVecUpperIndexMutex); //TODO fix this: maybe give the index of the
-	// check what to do in case input reaches to end
-	int currIndex = index; //TODO redundant
-	index += CHUNK;
-    pthread_mutex_unlock(iterMutex);
+	// lock inputVecUpperIndex of inputVec, increase inputVecUpperIndex by CHUNK.
+	pthread_mutex_lock(inputVecUpperIndexMutex);
+	lowerBound = (unsigned long) inputVecUpperIndex;
+	inputVecUpperIndex += CHUNK;
+    pthread_mutex_unlock(inputVecUpperIndexMutex);
 
-    // map all pairs in the range of this chunk. no other thread will map
-    // those values other then working thread
-    for( ; currIndex < index; ++currIndex)
+
+	upperBound = lowerBound + CHUNK < inputVec.size() ?
+				 lowerBound + CHUNK : inputVec.size();
+
+    for( ; lowerBound < upperBound; ++lowerBound)
     {
-        mapBase->Map(inputVec[currIndex].first, inputVec[currIndex].second);
+        mapBase->Map(inputVec[lowerBound].first, inputVec[lowerBound].second);
     }
 
     // notify shuffle thread that there is un-empty container
@@ -235,7 +243,7 @@ void* execMap(void*)
  */
 void initializer()
 {
-    *iterMutex = PTHREAD_MUTEX_INITIALIZER;
+	*inputVecUpperIndexMutex = PTHREAD_MUTEX_INITIALIZER;
     *mapMutex = PTHREAD_MUTEX_INITIALIZER;
 
     *timerMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -243,7 +251,7 @@ void initializer()
     threadsMap = THREAD_MAP();
 
 
-    index = 0;
+    inputVecUpperIndex = 0;
 }
 
 
@@ -260,7 +268,8 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
     // initial all global variables according to input
     mapBase = &mapReduce;
     threadLevel = multiThreadLevel;
-    inputVec = {itemsList.begin(), itemsList.end()};
+    //inputVec = {itemsList.begin(), itemsList.end()}; //TODO del
+	*itemsListGlobal = itemsList; // TODO keep pointer and use list, update all dependant things to iters (int indices and such)
 
 
     // call initializer first so we can run runMapReduceFramework multiple time;
@@ -276,12 +285,13 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 		pthread_mutex_t* threadMutex;
 
         // check if there are more pairs in inputList
-        if(index >= inputVec.size())
+        if(inputVecUpperIndex >= inputVec.size())
         {
             break;
         }
 
-        int res = pthread_create(&tid, NULL, &execMap, NULL);
+        int res =
+				pthread_create(&tid, NULL, (void *(*)(void *)) &execMap, NULL);
 
         // check if creations succeed
         if (res < 0)
