@@ -11,7 +11,7 @@
 
 #define THREAD_LEVEL 10
 
-int multiThreadLevel = THREAD_LEVEL;
+int multiThreadLevel = THREAD_LEVEL; //TODO get updated from given param
 
 /** we get the substring as an argument to main, but map and reduce need
   this variable to work properly, the best solution i found was to make it

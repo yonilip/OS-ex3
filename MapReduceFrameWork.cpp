@@ -13,27 +13,62 @@
 #define SUCCEESS 0
 #define CHUNK 10
 
-
+//TODO redo includes and make clean h file
 using namespace std;
 
 
 //global variables:
+
+/**
+ * num of threads
+ */
 int threadLevel;
+
+/**
+ * instance of client map and reduce object functions
+ */
 MapReduceBase* mapBase;
-vector<IN_ITEM> inpurVec;
+
+/**
+ * initial given data
+ */
+vector<IN_ITEM> inputVec;
+
+/**
+ * pointer to the cur place in inputVec
+ */
 int index;
-pthread_mutex_t *iterMutex;
+
+/**
+ * mutex for threadMap
+ */
 pthread_mutex_t *mapMutex;
+
+/**
+ * map of pThreads
+ */
 THREAD_MAP threadsMap;
+
+/**
+ * condition for notify shuffle
+ */
 pthread_cond_t conditionVar;
+
+/**
+ * mutex for timeout
+ */
 pthread_mutex_t* timerMutex;
+
+/**
+ * output of shuffle function
+ */
 map<k2Base*, list<v2Base>*> shuffleMap;
 
 
 /**
  *
  */
-void Emit2 (k2Base* key, v2Base* val)
+void Emit2(k2Base* key, v2Base* val)
 {
 
     int found = 0;
@@ -143,21 +178,21 @@ void *shuffle(void*)
 /**
  *
  */
-void *execMap(void*)
+void* execMap(void*)
 {
-    // check what to do in case input reaches to end
-    int currIndex = index;
 
-    // lock index of inputVec, increase index by CHUNK.
-    pthread_mutex_lock(iterMutex);
-    index += CHUNK;
+	// lock index of inputVec, increase index by CHUNK.
+	pthread_mutex_lock(iterMutex); //TODO fix this: maybe give the index of the
+	// check what to do in case input reaches to end
+	int currIndex = index;
+	index += CHUNK;
     pthread_mutex_unlock(iterMutex);
 
     // map all pairs in the range of this chunk. no other thread will map 
     // those values other then working thread
     for(currIndex; currIndex < index; ++currIndex)
     {
-        mapBase->Map(inpurVec[currIndex].first, inpurVec[currIndex].second);
+        mapBase->Map(inputVec[currIndex].first, inputVec[currIndex].second);
     }
 
     // notify shuffle thread that there is un-empty container
@@ -186,7 +221,9 @@ void initializer()
 /**
  *
  */
-OUT_ITEMS_LIST rcunMapRedueFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& itemsList, int multiThreadLevel)
+OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
+									IN_ITEMS_LIST &itemsList,
+									int multiThreadLevel)
 {
 
     // ***** FIRST PART: INIT ALL VALUES: *****
@@ -194,7 +231,7 @@ OUT_ITEMS_LIST rcunMapRedueFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& it
     // initial all global variables according to input
     mapBase = &mapReduce;
     threadLevel = multiThreadLevel;
-    inpurVec = {itemsList.begin(),itemsList.end()};
+    inputVec = {itemsList.begin(), itemsList.end()};
 
 
     // call initializer first so we can run runMapReduceFramework multiple time;
@@ -202,21 +239,20 @@ OUT_ITEMS_LIST rcunMapRedueFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& it
 
     // ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
 
-    pthread_t pid;
-    pthread_mutex_t* threadMutex;
-    int res;
 
-    // create all execMap threads
-    for(int i = 0; i < threadLevel ; ++i)
+	// create all execMap threads
+	for(int i = 0; i < threadLevel ; ++i)
     {
+		pthread_t tid;
+		pthread_mutex_t* threadMutex;
 
         // check if there are more pairs in inputList
-        if(index >= inpurVec.size())
+        if(index >= inputVec.size())
         {
             break;
         }
 
-        res = pthread_create(&pid, NULL, &execMap, NULL);
+        int res = pthread_create(&tid, NULL, &execMap, NULL);
 
         // check if creations succeed
         if (res < 0)
@@ -226,12 +262,13 @@ OUT_ITEMS_LIST rcunMapRedueFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& it
         }
 
         *threadMutex = PTHREAD_MUTEX_INITIALIZER;
-        vector<MID_ITEM> threadVec;
+        vector<MID_ITEM> threadVec; //TODO this might be erased after scope finishes
 
         // lock map while insert new thread (in case shuffle thread tries to search in map at the same time
         pthread_mutex_lock(mapMutex);
-        threadsMap.insert(make_pair(pid, make_pair(&threadVec,threadMutex)));
+        threadsMap.insert(make_pair(tid, make_pair(&threadVec, threadMutex)));
         pthread_mutex_unlock(mapMutex);
+		//TODO might be good to make a waiter here until all is done so scope dosent kill vars and stuff
     }
 
     // ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****

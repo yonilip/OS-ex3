@@ -26,7 +26,7 @@
 typedef std::pair<k1Base*, v1Base*> IN_ITEM;
 typedef std::pair<k3Base*, v3Base*> OUT_ITEM;
 typedef std::pair<k2Base*, v2Base*> MID_ITEM;
-typedef std::pair<std::vector<MID_ITEM>*,pthread_mutex_t*> THREAD_VALS;
+typedef std::pair<std::vector<MID_ITEM>*, pthread_mutex_t*> THREAD_VALS;
 
 typedef std::list<IN_ITEM> IN_ITEMS_LIST;
 typedef std::list<OUT_ITEM> OUT_ITEMS_LIST;
