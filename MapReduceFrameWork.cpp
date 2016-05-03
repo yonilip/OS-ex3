@@ -10,8 +10,34 @@
 
 #include <sys/time.h>
 #include "MapReduceFrameWork.h"
+#include <iostream>
+
+#include <vector>
+#include <map>
+#include <unordered_map>
+#include <list>
+#include <bits/shared_ptr.h>
+
 #define SUCCEESS 0
 #define CHUNK 10
+
+
+/**
+ * add comparator to initial unordered map so we can compare pthread keys
+ */
+struct pthreadCmp{
+    bool operator()(const pthread_t a, const pthread_t b) const
+    {
+        int res = pthread_equal(a, b);
+		return (res == 0);
+	}
+};
+
+
+typedef std::pair<k2Base*, v2Base*> MID_ITEM;
+typedef std::pair<std::vector<MID_ITEM>*, pthread_mutex_t*> THREAD_VALS;
+typedef std::unordered_map<pthread_t, THREAD_VALS, std::hash<pthread_t>, pthreadCmp> THREAD_MAP;
+
 
 //TODO redo includes and make clean h file
 using namespace std;
@@ -58,6 +84,9 @@ pthread_cond_t conditionVar;
  * mutex for timeout
  */
 pthread_mutex_t* timerMutex;
+
+//pthread_mutex_t inputVecUpperIndexMutex;
+shared_ptr<pthread_mutex_t> inputVecUpperIndexMutex;
 
 /**
  * output of shuffle function
@@ -182,15 +211,15 @@ void* execMap(void*)
 {
 
 	// lock index of inputVec, increase index by CHUNK.
-	pthread_mutex_lock(iterMutex); //TODO fix this: maybe give the index of the
+	pthread_mutex_lock((pthread_mutex_t*)inputVecUpperIndexMutex); //TODO fix this: maybe give the index of the
 	// check what to do in case input reaches to end
-	int currIndex = index;
+	int currIndex = index; //TODO redundant
 	index += CHUNK;
     pthread_mutex_unlock(iterMutex);
 
-    // map all pairs in the range of this chunk. no other thread will map 
+    // map all pairs in the range of this chunk. no other thread will map
     // those values other then working thread
-    for(currIndex; currIndex < index; ++currIndex)
+    for( ; currIndex < index; ++currIndex)
     {
         mapBase->Map(inputVec[currIndex].first, inputVec[currIndex].second);
     }

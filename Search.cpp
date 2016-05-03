@@ -4,10 +4,10 @@
 #include "MapReduceFrameWork.h"
 #include <iostream>
 #include <fstream>
-#include<cstdlib>
-#include<string.h>
-#include<sstream>
-#include<dirent.h>
+#include <cstdlib>
+#include <string.h>
+#include <sstream>
+#include <dirent.h>
 
 #define THREAD_LEVEL 10
 

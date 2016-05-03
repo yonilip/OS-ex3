@@ -1,3 +1,4 @@
+/*
 
 
 #ifndef MAPREDUCEFRAMEWORK_H
@@ -32,9 +33,11 @@ typedef std::list<IN_ITEM> IN_ITEMS_LIST;
 typedef std::list<OUT_ITEM> OUT_ITEMS_LIST;
 
 
+*/
 /**
  * add comparator to initial unordered map so we can compare pthread keys
- */
+ *//*
+
 struct pthreadCmp{
     bool operator()(const pthread_t a, const pthread_t b) const
     {
@@ -52,6 +55,27 @@ struct pthreadCmp{
 typedef std::unordered_map<pthread_t, THREAD_VALS, std::hash<pthread_t>, pthreadCmp> THREAD_MAP;
 
 
+
+OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& itemsList, int multiThreadLevel);
+
+void Emit2 (k2Base*, v2Base*);
+void Emit3 (k3Base*, v3Base*);
+
+#endif //MAPREDUCEFRAMEWORK_H*/
+
+
+
+#ifndef MAPREDUCEFRAMEWORK_H
+#define MAPREDUCEFRAMEWORK_H
+
+#include "MapReduceClient.h"
+#include <utility>
+
+typedef std::pair<k1Base*, v1Base*> IN_ITEM;
+typedef std::pair<k3Base*, v3Base*> OUT_ITEM;
+
+typedef std::list<IN_ITEM> IN_ITEMS_LIST;
+typedef std::list<OUT_ITEM> OUT_ITEMS_LIST;
 
 OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase& mapReduce, IN_ITEMS_LIST& itemsList, int multiThreadLevel);
 
