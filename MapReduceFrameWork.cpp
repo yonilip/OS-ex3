@@ -101,6 +101,13 @@ auto iterEnd = (*itemsListGlobal).end();
 
 pthread_cond_t shuffleCondVar = PTHREAD_COND_INITIALIZER;
 
+vector<pthread_t&> execMapThreadsVector;
+
+thread_local int tid;
+
+int thread_count = 0;
+pthread_mutex_t thread_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 /**
  *
@@ -109,7 +116,7 @@ void Emit2(k2Base* key, v2Base* val)
 {
 
     int found = 0;
-    pthread_t pid = pthread_self();
+    pthread_t tid = pthread_self();
     THREAD_VALS threadVal;
     // lock map in order to search for the right thread (otherwise map can change while searching)
     pthread_mutex_lock(mapMutex);
@@ -119,7 +126,7 @@ void Emit2(k2Base* key, v2Base* val)
 //    {
 //        if(pthread_equal(pid, (*it).first))
 //        {
-    threadVal = (*threadsMap.at(pid));
+    threadVal = (*threadsMap.at(tid));
 //            found = 1;
 //            break;
 //
@@ -146,6 +153,11 @@ void Emit3 (k3Base*, v3Base*)
 
 }
 
+
+/**
+ * wait for signal, then go over each threads container and if not empty then
+ * append the data from the pair into the shuffledData
+ */
 void *shuffle(void*)
 {
     int res;
@@ -236,6 +248,11 @@ void safeAdvance(list<IN_ITEM>::iterator& iter)
  */
 void* execMap(void*)
 {
+	pthread_mutex_lock(&thread_count_mutex);
+	tid = thread_count++;
+	pthread_mutex_unlock(&thread_count_mutex);
+
+
     list<IN_ITEM>::iterator lowerBound, upperBound;
 
     while (itemListIter != iterEnd)
@@ -279,6 +296,16 @@ void initializer()
 }
 
 
+void checkSysCall(int res)
+{
+	//TODO maybe not zero instead of neg
+	if (res < 0)
+	{
+		cout << "error" << endl;
+		exit(1);
+	}
+}
+
 /**
  *
  */
@@ -289,6 +316,11 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
     //TODO start with init of shuffle
     pthread_cond_t* pShuffleCondVar = &shuffleCondVar;
+	pthread_t shuffThread;
+	int shuffRes = pthread_create(&shuffThread, NULL, &shuffle, NULL);
+
+	checkSysCall(shuffRes);
+
 
     // ***** FIRST PART: INIT ALL VALUES: *****
 
@@ -303,6 +335,7 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
     // ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
 
+
     //TODO what about creating a dast (vec?) for holding the tid's? see TA page 26 for e.g
     //TODO thus we could have mapping of tid to another vec of dasts that hold each threads value
 	// create all execMap threads
@@ -310,18 +343,12 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
     {
 		pthread_t tid;
 		pthread_mutex_t* threadMutex;
-
+		execMapThreadsVector.push_back(tid);
         // TODO do we need to lock list for this check?
 
-        int res =
-				pthread_create(&tid, NULL, &execMap, NULL);
+        int res = pthread_create(&tid, NULL, &execMap, NULL);
 
-        // check if creations succeed
-        if (res < 0)
-        {
-            cout << "error" << endl;
-            exit(1);
-        }
+        checkSysCall(res);
 
         *threadMutex = PTHREAD_MUTEX_INITIALIZER;
         vector<MID_ITEM> threadVec; //TODO this might be erased after scope finishes
@@ -348,7 +375,9 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
 
     //TODO use pthread_mutex_destroy(mutex) to free mutex objects
+
     //TODO use pthread_cond_destroy(cond) to free cond objects
+	pthread_cond_destroy(pShuffleCondVar);
 
 }
 
