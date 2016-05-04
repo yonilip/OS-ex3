@@ -62,7 +62,7 @@ MapReduceBase* mapBase;
 /**
  * pointer to the cur place in inputVec
  */
-list<IN_ITEM>::iterator inputListIter;
+list<IN_ITEM>::iterator itemListIter;
 
 /**
  * mutex for threadMap
@@ -113,26 +113,26 @@ void Emit2(k2Base* key, v2Base* val)
     pthread_mutex_lock(mapMutex);
 
     // search for pid in map
-    for(auto it = threadsMap.begin(); it != threadsMap.end(); ++it)
-    {
-        if(pthread_equal(pid, (*it).first))
-        {
-            threadVal = threadsMap.at(pid);
-            found = 1;
-            break;
-
-        }
-    }
+//    for(auto it = threadsMap.begin(); it != threadsMap.end(); ++it)
+//    {
+//        if(pthread_equal(pid, (*it).first))
+//        {
+    threadVal = (*threadsMap.at(pid));
+//            found = 1;
+//            break;
+//
+//        }
+//    }
     pthread_mutex_unlock(mapMutex);
 
     // add pair only in case we found our thread in map
     //TODO check if we can assume it will always be there
-    if(found)
-    {
-        pthread_mutex_lock(threadVal.second);
-        threadVal.first->push_back(make_pair(key,val));
-        pthread_mutex_unlock(threadVal.second);
-    }
+//    if(found)
+//    {
+    pthread_mutex_lock(threadVal.second);
+    threadVal.first->push_back(make_pair(key,val));
+    pthread_mutex_unlock(threadVal.second);
+//    }
 
 }
 
@@ -228,7 +228,7 @@ void safeAdvance(list<IN_ITEM>::iterator& iter)
 /**
  * Execution of Map() for each pThread
  * locks the global upper index of the input Vec and assigns lower and upper
- * bounds and update the global inputListIter += CHUNK
+ * bounds and update the global itemListIter += CHUNK
  * for each index in the bound activate map()
  * when done notify the conditional shuffle thread
  */
@@ -236,23 +236,25 @@ void execMap(void*)
 {
     list<IN_ITEM>::iterator lowerBound, upperBound;
 
-	// lock inputListIter of inputVec, increase inputListIter by CHUNK.
-	pthread_mutex_lock(inputListIterMutex);
-	lowerBound = inputListIter;
-    safeAdvance(inputListIter);
-    pthread_mutex_unlock(inputListIterMutex);
-
-    upperBound = lowerBound;
-    safeAdvance(upperBound);
-
-
-    for( ; lowerBound != upperBound; ++lowerBound)
+    while (itemListIter != iterEnd)
     {
-        mapBase->Map((*lowerBound).first, (*lowerBound).second);
-    }
+        // lock itemListIter of inputVec, increase itemListIter by CHUNK.
+        pthread_mutex_lock(inputListIterMutex);
+        lowerBound = itemListIter;
+        safeAdvance(itemListIter);
+        pthread_mutex_unlock(inputListIterMutex);
 
-    // notify shuffle thread that there is un-empty container
-    pthread_cond_signal(&conditionVar);
+        upperBound = lowerBound;
+        safeAdvance(upperBound);
+
+
+        for( ; lowerBound != upperBound; ++lowerBound)
+        {
+            mapBase->Map((*lowerBound).first, (*lowerBound).second);
+        }
+        // notify shuffle thread that there is un-empty container
+        pthread_cond_signal(&conditionVar);
+    }
 }
 
 
@@ -270,7 +272,7 @@ void initializer()
     threadsMap = THREAD_MAP();
 
 
-    inputListIter = (*itemsListGlobal).begin();
+    itemListIter = (*itemsListGlobal).begin();
 }
 
 
@@ -282,12 +284,13 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 									int multiThreadLevel)
 {
 
+    //TODO start with init of shuffle
+
     // ***** FIRST PART: INIT ALL VALUES: *****
 
     // initial all global variables according to input
     mapBase = &mapReduce;
     threadLevel = multiThreadLevel;
-    //inputVec = {itemsList.begin(), itemsList.end()}; //TODO del
 	*itemsListGlobal = itemsList; // TODO keep pointer and use list, update all dependant things to iters (int indices and such)
 
 
@@ -298,17 +301,12 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
 
 	// create all execMap threads
-	for(int i = 0; i < threadLevel ; ++i)
+	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i)
     {
 		pthread_t tid;
 		pthread_mutex_t* threadMutex;
 
         // TODO do we need to lock list for this check?
-        // check if there are more pairs in inputList
-        if(inputListIter == (*itemsListGlobal).end())
-        {
-            break;
-        }
 
         int res =
 				pthread_create(&tid, NULL, (void *(*)(void *)) &execMap, NULL);
@@ -332,5 +330,9 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
     // ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
 
+}
 
+int main()
+{
+    //TODO delete!! this is lib not exec
 }
