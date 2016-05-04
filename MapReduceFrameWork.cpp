@@ -16,26 +16,14 @@
 #include <map>
 #include <unordered_map>
 #include <list>
+#include <deque>
 
 #define SUCCEESS 0
 #define CHUNK 10
 
 
-/**
- * add comparator to initial unordered map so we can compare pthread keys
- */
-struct pthreadCmp{
-    bool operator()(const pthread_t a, const pthread_t b) const
-    {
-        int res = pthread_equal(a, b);
-		return (res == 0);
-	}
-};
-
-
 typedef std::pair<k2Base*, v2Base*> MID_ITEM;
-typedef std::pair<std::vector<MID_ITEM>*, pthread_mutex_t*> THREAD_VALS;
-typedef std::unordered_map<pthread_t, THREAD_VALS, std::hash<pthread_t>, pthreadCmp> THREAD_MAP;
+
 
 
 //TODO redo includes and make clean h file
@@ -70,28 +58,17 @@ list<IN_ITEM>::iterator itemListIter;
 pthread_mutex_t *mapMutex;
 
 /**
- * map of pThreads
- */
-THREAD_MAP threadsMap;
-
-/**
  * condition for notify shuffle
  */
 pthread_cond_t conditionVar;
-		execMapThreadsVector.push_back(execMapThread);
 
 /**
  * mutex for timeout
  */
-pthread_mutex_t* timerMutex;
+pthread_mutex_t timerMutex;
 
 //pthread_mutex_t inputListIterMutex;
 pthread_mutex_t*inputListIterMutex;
-
-/**
- * output of shuffle function
- */
-map<k2Base*, list<v2Base>*> shuffleMap;
 
 /**
  * pointer to itemsList
@@ -100,51 +77,28 @@ IN_ITEMS_LIST* itemsListGlobal;
 
 auto iterEnd = (*itemsListGlobal).end();
 
-pthread_cond_t shuffleCondVar = PTHREAD_COND_INITIALIZER;
-
-vector<pthread_t&> execMapThreadsVector;
-
 thread_local int tid;
 
-int thread_count = 0;
-pthread_mutex_t thread_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+int threadCount;
+pthread_mutex_t threadCountMutex;
 
+
+deque<pair<deque<MID_ITEM>, pthread_mutex_t>> globalVecContainers;
+
+map<k2Base*, deque<v2Base*>> shuffleMap;
+
+bool keepShuffle;
 
 /**
- *
+ *	push to the threads deque the pair k2 v2
  */
 void Emit2(k2Base* key, v2Base* val)
 {
+	pthread_mutex_lock(&globalVecContainers[tid].second);
 
-		execMapThreadsVector.push_back(execMapThread);
-    int found = 0;
-    pthread_t tid = pthread_self();
-    THREAD_VALS threadVal;
-    // lock map in order to search for the right thread (otherwise map can change while searching)
-    pthread_mutex_lock(mapMutex);
+	globalVecContainers[tid].first.push_back(make_pair(key, val));
 
-    // search for pid in map
-//    for(auto it = threadsMap.begin(); it != threadsMap.end(); ++it)
-//    {
-//        if(pthread_equal(pid, (*it).first))
-//        {
-    threadVal = (*threadsMap.at(tid));
-//            found = 1;
-//            break;
-//
-//        }
-//    }
-    pthread_mutex_unlock(mapMutex);
-
-    // add pair only in case we found our thread in map
-    //TODO check if we can assume it will always be there
-//    if(found)
-//    {
-    pthread_mutex_lock(threadVal.second);
-    threadVal.first->push_back(make_pair(key,val));
-    pthread_mutex_unlock(threadVal.second);
-//    }
-
+	pthread_mutex_unlock(&globalVecContainers[tid].second);
 }
 
 /**
@@ -153,151 +107,6 @@ void Emit2(k2Base* key, v2Base* val)
 void Emit3 (k3Base*, v3Base*)
 {
 
-}
-
-
-/**
- * wait for signal, then go over each threads container and if not empty then
- * append the data from the pair into the shuffle
-		execMapThreadsVector.push_back(execMapThread);dData
- */
-void *shuffle(void*)
-{
-    int res;
-
-    struct timespec timeToWait;
-    struct timeval now;
-
-
-    // get absolute current time
-    gettimeofday(&now, NULL);
-
-    while(true)
-    {
-        timeToWait.tv_sec = now.tv_sec;
-
-        //TODO check if conversion is OK
-        timeToWait.tv_nsec = now.tv_usec + 10000000;
-
-        //TODO no need to lock this because there is only oe consumer
-        //pthread_mutex_lock(timerMutex);
-        res = pthread_cond_timedwait(&conditionVar, timerMutex, &timeToWait);
-        //pthread_mutex_unlock(timerMutex);
-
-        // in this case we got a signal that was sent by one of execMap threads.
-        // we now that there is defiantly one container that is not empty (the one belongs to the thread that sent the signal)
-        if(res == SUCCEESS)
-        {
-            // iterate threadMap until we find all containers that are nor empty
-            for(auto it = threadsMap.begin(); it != threadsMap.end(); ++it)
-            {
-                THREAD_VALS vals = it->second;
-                if(!vals.first->empty())
-                {
-                    pthread_mutex_lock(vals.second);
-                    for(MID_ITEM pair : *vals.first)
-                    {
-                        k2Base* key = pair.first;
-                        list<v2Base>* listPtr = shuffleMap[key];
-                        listPtr->push_back(*pair.second);
-                    }
-                    // erase values from container
-                    vals.first->clear();
-                    pthread_mutex_unlock(vals.second);
-                }
-            }
-            continue;
-        }
-
-        if(res == EINVAL || res == EPERM)
-        {
-            // exception??
-            //TODO what sould we do here
-            break;
-        }
-
-        if(res == ETIMEDOUT)
-        {
-
-        }
-        break;
-
-    }
-
-}
-
-/**
- * advance iterator lowerBound in safe manner such that wont exceed the end of
- * the container
- */
-void safeAdvance(list<IN_ITEM>::iterator& iter)
-{
-    size_t remaining((size_t) distance(iter, iterEnd));
-    int n = CHUNK;
-    if (remaining < CHUNK)
-    {
-        n = (int) remaining;
-    }
-    advance(iter, n);
-}
-
-
-/**
- * Execution of Map() for each pThread
- * locks the global upper index of the input Vec and assigns lower and upper
- * bounds and update the global itemListIter += CHUNK
- * for each index in the bound activate map()
- * when done notify the conditional shuffle thread
- */
-void* execMap(void*)
-
-{
-    pthread_mutex_lock(&thread_count_mutex);
-    execMapThreadsVector.push_back(execMapThread);
-    tid = thread_count++;
-	pthread_mutex_unlock(&thread_count_mutex);
-
-
-    list<IN_ITEM>::iterator lowerBound, upperBound;
-
-    while (itemListIter != iterEnd)
-    {
-        // lock itemListIter of inputVec, increase itemListIter by CHUNK.
-        pthread_mutex_lock(inputListIterMutex);
-        lowerBound = itemListIter;
-        safeAdvance(itemListIter);
-        pthread_mutex_unlock(inputListIterMutex);
-
-        upperBound = lowerBound;
-        safeAdvance(upperBound);
-
-
-        for( ; lowerBound != upperBound; ++lowerBound)
-        {
-            mapBase->Map((*lowerBound).first, (*lowerBound).second);
-        }
-        // notify shuffle thread that there is un-empty container
-        pthread_cond_signal(&conditionVar);
-    }
-    pthread_exit(NULL); //TODO this seems to satisfy the void*
-}
-
-
-/**
- * initial all global variacle so when calling runMapReduceFramework multiple
- * time will start new session
- */
-void initializer()
-{
-	*inputListIterMutex = PTHREAD_MUTEX_INITIALIZER;
-    *mapMutex = PTHREAD_MUTEX_INITIALIZER;
-
-    *timerMutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_t conditionVar = PTHREAD_COND_INITIALIZER;
-    threadsMap = THREAD_MAP();
-
-
-    itemListIter = (*itemsListGlobal).begin();
 }
 
 
@@ -311,6 +120,136 @@ void checkSysCall(int res)
 	}
 }
 
+
+void pullDataFromMapping()
+{
+	for (int i = 0; i < (int) globalVecContainers.size(); ++i)
+	{
+		if (!globalVecContainers[i].first.empty())
+		{
+			pthread_mutex_lock(&globalVecContainers[i].second);
+			while (!globalVecContainers[i].first.empty())
+			{
+				// copy the pointers from the globalVecContainers at i and remove them
+				MID_ITEM &frontPair = globalVecContainers[i].first.front();
+				shuffleMap[frontPair.first].push_back(frontPair.second); //TODO check that this inits a deque as the value on the first time
+				globalVecContainers[i].first.pop_front();
+			}
+			pthread_mutex_unlock(&globalVecContainers[i].second);
+		}
+	}
+}
+
+
+/**
+ * wait for signal, then go over each threads container and if not empty then
+ * append the data from the pair into the shuffledData
+ */
+void *shuffle(void*)
+{
+	int res;
+	struct timespec timeToWait;
+	struct timeval now;
+
+	// get absolute current time
+	gettimeofday(&now, NULL);
+
+	while(keepShuffle)
+	{
+		timeToWait.tv_sec = now.tv_sec;
+
+		// usec is microsec, nsec is in nanosec
+		timeToWait.tv_nsec = (now.tv_usec * 1000) + 10000000;
+
+		res = pthread_cond_timedwait(&conditionVar, &timerMutex, &timeToWait);
+
+		if(res == EINVAL || res == EPERM)
+		{
+			checkSysCall(-1);
+		}
+
+		pullDataFromMapping();
+	}
+	pullDataFromMapping(); //last iteration after execMap's are done
+	pthread_exit(NULL);
+}
+
+/**
+ * advance iterator lowerBound in safe manner such that wont exceed the end of
+ * the container
+ */
+void safeAdvance(list<IN_ITEM>::iterator& iter)
+{
+	size_t remaining((size_t) distance(iter, iterEnd));
+	int n = CHUNK;
+	if (remaining < CHUNK)
+	{
+		n = (int) remaining;
+	}
+	advance(iter, n);
+}
+
+
+/**
+ * Execution of Map() for each pThread
+ * locks the global upper index of the input Vec and assigns lower and upper
+ * bounds and update the global itemListIter += CHUNK
+ * for each index in the bound activate map()
+ * when done notify the conditional shuffle thread
+ */
+void* execMap(void*)
+{
+	pthread_mutex_lock(&threadCountMutex);
+	tid = threadCount++;
+	pthread_mutex_unlock(&threadCountMutex);
+
+	pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
+	vector<MID_ITEM> threadVec;
+	globalVecContainers[tid] = make_pair(threadVec, threadMutex);
+
+
+	list<IN_ITEM>::iterator lowerBound, upperBound;
+
+	while (itemListIter != iterEnd)
+	{
+		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
+		pthread_mutex_lock(inputListIterMutex);
+		lowerBound = itemListIter;
+		safeAdvance(itemListIter);
+		pthread_mutex_unlock(inputListIterMutex);
+
+		upperBound = lowerBound;
+		safeAdvance(upperBound);
+
+
+		for( ; lowerBound != upperBound; ++lowerBound)
+		{
+			mapBase->Map((*lowerBound).first, (*lowerBound).second);
+		}
+		// notify shuffle thread that there is un-empty container
+		pthread_cond_signal(&conditionVar);
+	}
+
+	//after all chunks have been mapped
+	pthread_exit(NULL);
+}
+
+
+/**
+ * initial all global variacle so when calling runMapReduceFramework multiple
+ * time will start new session
+ */
+void initializer()
+{
+	timerMutex = PTHREAD_MUTEX_INITIALIZER;
+	conditionVar = PTHREAD_COND_INITIALIZER;
+	threadCountMutex = PTHREAD_MUTEX_INITIALIZER;
+	threadCount = 0;
+	itemListIter = (*itemsListGlobal).begin();
+	keepShuffle = true;
+}
+
+
 /**
  *
  */
@@ -319,75 +258,62 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 									int multiThreadLevel)
 {
 
-    //TODO start with init of shuffle
-    pthread_cond_t* pShuffleCondVar = &shuffleCondVar;
+	//TODO start with init of shuffle
 	pthread_t shuffThread;
 	int shuffRes = pthread_create(&shuffThread, NULL, &shuffle, NULL);
-
 	checkSysCall(shuffRes);
 
 
-    // ***** FIRST PART: INIT ALL VALUES: *****
+	// ***** FIRST PART: INIT ALL VALUES: *****
 
-    // initial all global variables according to input
-    mapBase = &mapReduce;
-    threadLevel = multiThreadLevel;
-	*itemsListGlobal = itemsList; // TODO keep pointer and use list, update all dependant things to iters (int indices and such)
-
-
-    // call initializer first so we can run runMapReduceFramework multiple time;
-    initializer();
-
-    // ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
+	// initial all global variables according to input
+	mapBase = &mapReduce;
+	threadLevel = multiThreadLevel;
+	*itemsListGlobal = itemsList;
 
 
-    //TODO what about creating a dast (vec?) for holding the tid's? see TA page 26 for e.g
-    //TODO thus we could have mapping of tid to another vec of dasts that hold each threads value
+	// call initializer first so we can run runMapReduceFramework multiple time;
+	initializer();
+
+	// ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
+	vector<pthread_t> threads((unsigned long) threadLevel);
+
 	// create all execMap threads
-	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i)
-    {
-		pthread_t execMapThread;
-		pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
-		execMapThreadsVector.push_back(execMapThread);
-        // TODO do we need to lock list for this check?
+	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i) //TODO is 2nd eval needed?
+	{
+		/*pthread_t execMapThread;
+		threads.push_back(execMapThread);*/
+		int res = pthread_create(&threads[i], NULL, &execMap, NULL);
+		checkSysCall(res);
+	}
 
-        int res = pthread_create(&execMapThread, NULL, &execMap, NULL);
-        checkSysCall(res);
+	// ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
+	//join the threads
+	for (int i = 0; i < threadLevel ; ++i)
+	{
+		int res = pthread_join(threads[i], NULL);
+		checkSysCall(res);
+	}
+
+	//check that shuffle is done
+	keepShuffle = false;
+	shuffRes = pthread_join(shuffThread, NULL);
+	checkSysCall(shuffRes);
 
 
-
-
-        vector<MID_ITEM> threadVec; //TODO this might be erased after scope finishes
-
-        // lock map while insert new thread (in case shuffle thread tries to search in map at the same time
-        pthread_mutex_lock(mapMutex);
-        threadsMap.insert(make_pair(execMapThread, make_pair(&threadVec, threadMutex)));
-        pthread_mutex_unlock(mapMutex);
-		//TODO might be good to make a waiter here until all is done so scope dosent kill vars and stuff
-    }
-
-    // ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
-    //TODO use pthread_join to block this func until map and shuffle are done
-
+	//start Reduce
 
 
 
 
 
+	//TODO use pthread_mutex_destroy(mutex) to free mutex objects
 
-
-
-
-
-
-    //TODO use pthread_mutex_destroy(mutex) to free mutex objects
-
-    //TODO use pthread_cond_destroy(cond) to free cond objects
-	pthread_cond_destroy(pShuffleCondVar);
+	//TODO use pthread_cond_destroy(cond) to free cond objects
 
 }
 
 int main()
 {
-    //TODO delete!! this is lib not exec
+	//TODO delete!! this is lib not exec
 }
