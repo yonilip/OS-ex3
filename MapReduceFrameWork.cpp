@@ -43,19 +43,9 @@ int threadLevel;
 MapReduceBase* mapBase;
 
 /**
- * initial given data
- */
-
-
-/**
  * pointer to the cur place in inputVec
  */
 list<IN_ITEM>::iterator itemListIter;
-
-/**
- * mutex for threadMap
- */
-pthread_mutex_t *mapMutex;
 
 /**
  * condition for notify shuffle
@@ -67,8 +57,7 @@ pthread_cond_t conditionVar;
  */
 pthread_mutex_t timerMutex;
 
-//pthread_mutex_t inputListIterMutex;
-pthread_mutex_t*inputListIterMutex;
+pthread_mutex_t* inputListIterMutex;
 
 /**
  * pointer to itemsList
@@ -88,6 +77,7 @@ deque<pair<deque<MID_ITEM>, pthread_mutex_t>> globalVecContainers;
 map<k2Base*, deque<v2Base*>> shuffleMap;
 
 bool keepShuffle;
+
 
 /**
  *	push to the threads deque the pair k2 v2
@@ -120,7 +110,10 @@ void checkSysCall(int res)
 	}
 }
 
-
+/**
+ * go over each threads container and if not empty then
+ * append the data from the pair into the shuffledData
+ */
 void pullDataFromMapping()
 {
 	for (int i = 0; i < (int) globalVecContainers.size(); ++i)
@@ -235,6 +228,22 @@ void* execMap(void*)
 }
 
 
+void* execReduce(void*)
+{
+	pthread_mutex_lock(&threadCountMutex);
+	tid = threadCount++;
+	pthread_mutex_unlock(&threadCountMutex);
+
+
+	map<k2Base*, deque<v2Base*>>::iterator lowerBound, upperBound;
+
+
+
+
+	pthread_exit(NULL);
+}
+
+
 /**
  * initial all global variacle so when calling runMapReduceFramework multiple
  * time will start new session
@@ -248,7 +257,6 @@ void initializer()
 	itemListIter = (*itemsListGlobal).begin();
 	keepShuffle = true;
 }
-
 
 /**
  *
@@ -281,8 +289,6 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	// create all execMap threads
 	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i) //TODO is 2nd eval needed?
 	{
-		/*pthread_t execMapThread;
-		threads.push_back(execMapThread);*/
 		int res = pthread_create(&threads[i], NULL, &execMap, NULL);
 		checkSysCall(res);
 	}
@@ -300,9 +306,23 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	shuffRes = pthread_join(shuffThread, NULL);
 	checkSysCall(shuffRes);
 
+	//reset threads vector and id's
+	threads.clear();
+	threads.reserve((unsigned long) threadLevel);
+	threadCount = 0;
 
 	//start Reduce
+	for (int j = 0; j < threadLevel; ++j)
+	{
+		int res = pthread_create(&threads[j], NULL, &execReduce, NULL);
+		checkSysCall(res);
+	}
 
+	for (int k = 0; k < threadLevel; ++k)
+	{
+		int res = pthread_join(threads[k], NULL);
+		checkSysCall(res);
+	}
 
 
 
