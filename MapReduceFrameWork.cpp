@@ -16,7 +16,6 @@
 #include <map>
 #include <unordered_map>
 #include <list>
-#include <bits/shared_ptr.h>
 
 #define SUCCEESS 0
 #define CHUNK 10
@@ -58,12 +57,12 @@ MapReduceBase* mapBase;
 /**
  * initial given data
  */
-vector<IN_ITEM> inputVec;
+
 
 /**
  * pointer to the cur place in inputVec
  */
-int inputVecUpperIndex;
+list<IN_ITEM>::iterator inputListIter;
 
 /**
  * mutex for threadMap
@@ -85,16 +84,21 @@ pthread_cond_t conditionVar;
  */
 pthread_mutex_t* timerMutex;
 
-//pthread_mutex_t inputVecUpperIndexMutex;
-pthread_mutex_t* inputVecUpperIndexMutex;
+//pthread_mutex_t inputListIterMutex;
+pthread_mutex_t*inputListIterMutex;
 
 /**
  * output of shuffle function
  */
 map<k2Base*, list<v2Base>*> shuffleMap;
 
-
+/**
+ * pointer to itemsList
+ */
 IN_ITEMS_LIST* itemsListGlobal;
+
+auto iterEnd = (*itemsListGlobal).end();
+
 
 /**
  *
@@ -205,31 +209,46 @@ void *shuffle(void*)
 
 }
 
+/**
+ * advance iterator lowerBound in safe manner such that wont exceed the end of
+ * the container
+ */
+void safeAdvance(list<IN_ITEM>::iterator& iter)
+{
+    size_t remaining((size_t) distance(iter, iterEnd));
+    int n = CHUNK;
+    if (remaining < CHUNK)
+    {
+        n = (int) remaining;
+    }
+    advance(iter, n);
+}
+
 
 /**
  * Execution of Map() for each pThread
  * locks the global upper index of the input Vec and assigns lower and upper
- * bounds and update the global inputVecUpperIndex += CHUNK
+ * bounds and update the global inputListIter += CHUNK
  * for each index in the bound activate map()
  * when done notify the conditional shuffle thread
  */
 void execMap(void*)
 {
-	unsigned long lowerBound, upperBound;
+    list<IN_ITEM>::iterator lowerBound, upperBound;
 
-	// lock inputVecUpperIndex of inputVec, increase inputVecUpperIndex by CHUNK.
-	pthread_mutex_lock(inputVecUpperIndexMutex);
-	lowerBound = (unsigned long) inputVecUpperIndex;
-	inputVecUpperIndex += CHUNK;
-    pthread_mutex_unlock(inputVecUpperIndexMutex);
+	// lock inputListIter of inputVec, increase inputListIter by CHUNK.
+	pthread_mutex_lock(inputListIterMutex);
+	lowerBound = inputListIter;
+    safeAdvance(inputListIter);
+    pthread_mutex_unlock(inputListIterMutex);
+
+    upperBound = lowerBound;
+    safeAdvance(upperBound);
 
 
-	upperBound = lowerBound + CHUNK < inputVec.size() ?
-				 lowerBound + CHUNK : inputVec.size();
-
-    for( ; lowerBound < upperBound; ++lowerBound)
+    for( ; lowerBound != upperBound; ++lowerBound)
     {
-        mapBase->Map(inputVec[lowerBound].first, inputVec[lowerBound].second);
+        mapBase->Map((*lowerBound).first, (*lowerBound).second);
     }
 
     // notify shuffle thread that there is un-empty container
@@ -243,7 +262,7 @@ void execMap(void*)
  */
 void initializer()
 {
-	*inputVecUpperIndexMutex = PTHREAD_MUTEX_INITIALIZER;
+	*inputListIterMutex = PTHREAD_MUTEX_INITIALIZER;
     *mapMutex = PTHREAD_MUTEX_INITIALIZER;
 
     *timerMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -251,7 +270,7 @@ void initializer()
     threadsMap = THREAD_MAP();
 
 
-    inputVecUpperIndex = 0;
+    inputListIter = (*itemsListGlobal).begin();
 }
 
 
@@ -284,8 +303,9 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 		pthread_t tid;
 		pthread_mutex_t* threadMutex;
 
+        // TODO do we need to lock list for this check?
         // check if there are more pairs in inputList
-        if(inputVecUpperIndex >= inputVec.size())
+        if(inputListIter == (*itemsListGlobal).end())
         {
             break;
         }
