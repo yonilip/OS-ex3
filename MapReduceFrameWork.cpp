@@ -78,6 +78,7 @@ THREAD_MAP threadsMap;
  * condition for notify shuffle
  */
 pthread_cond_t conditionVar;
+		execMapThreadsVector.push_back(execMapThread);
 
 /**
  * mutex for timeout
@@ -115,6 +116,7 @@ pthread_mutex_t thread_count_mutex = PTHREAD_MUTEX_INITIALIZER;
 void Emit2(k2Base* key, v2Base* val)
 {
 
+		execMapThreadsVector.push_back(execMapThread);
     int found = 0;
     pthread_t tid = pthread_self();
     THREAD_VALS threadVal;
@@ -156,7 +158,8 @@ void Emit3 (k3Base*, v3Base*)
 
 /**
  * wait for signal, then go over each threads container and if not empty then
- * append the data from the pair into the shuffledData
+ * append the data from the pair into the shuffle
+		execMapThreadsVector.push_back(execMapThread);dData
  */
 void *shuffle(void*)
 {
@@ -247,9 +250,11 @@ void safeAdvance(list<IN_ITEM>::iterator& iter)
  * when done notify the conditional shuffle thread
  */
 void* execMap(void*)
+
 {
-	pthread_mutex_lock(&thread_count_mutex);
-	tid = thread_count++;
+    pthread_mutex_lock(&thread_count_mutex);
+    execMapThreadsVector.push_back(execMapThread);
+    tid = thread_count++;
 	pthread_mutex_unlock(&thread_count_mutex);
 
 
@@ -341,21 +346,22 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	// create all execMap threads
 	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i)
     {
-		pthread_t tid;
-		pthread_mutex_t* threadMutex;
-		execMapThreadsVector.push_back(tid);
+		pthread_t execMapThread;
+		pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
+		execMapThreadsVector.push_back(execMapThread);
         // TODO do we need to lock list for this check?
 
-        int res = pthread_create(&tid, NULL, &execMap, NULL);
-
+        int res = pthread_create(&execMapThread, NULL, &execMap, NULL);
         checkSysCall(res);
 
-        *threadMutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+
         vector<MID_ITEM> threadVec; //TODO this might be erased after scope finishes
 
         // lock map while insert new thread (in case shuffle thread tries to search in map at the same time
         pthread_mutex_lock(mapMutex);
-        threadsMap.insert(make_pair(tid, make_pair(&threadVec, threadMutex)));
+        threadsMap.insert(make_pair(execMapThread, make_pair(&threadVec, threadMutex)));
         pthread_mutex_unlock(mapMutex);
 		//TODO might be good to make a waiter here until all is done so scope dosent kill vars and stuff
     }
