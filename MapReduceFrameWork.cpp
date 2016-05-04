@@ -99,6 +99,8 @@ IN_ITEMS_LIST* itemsListGlobal;
 
 auto iterEnd = (*itemsListGlobal).end();
 
+pthread_cond_t shuffleCondVar = PTHREAD_COND_INITIALIZER;
+
 
 /**
  *
@@ -232,7 +234,7 @@ void safeAdvance(list<IN_ITEM>::iterator& iter)
  * for each index in the bound activate map()
  * when done notify the conditional shuffle thread
  */
-void execMap(void*)
+void* execMap(void*)
 {
     list<IN_ITEM>::iterator lowerBound, upperBound;
 
@@ -255,6 +257,7 @@ void execMap(void*)
         // notify shuffle thread that there is un-empty container
         pthread_cond_signal(&conditionVar);
     }
+    pthread_exit(NULL); //TODO this seems to satisfy the void*
 }
 
 
@@ -285,6 +288,7 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 {
 
     //TODO start with init of shuffle
+    pthread_cond_t* pShuffleCondVar = &shuffleCondVar;
 
     // ***** FIRST PART: INIT ALL VALUES: *****
 
@@ -299,7 +303,8 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 
     // ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
 
-
+    //TODO what about creating a dast (vec?) for holding the tid's? see TA page 26 for e.g
+    //TODO thus we could have mapping of tid to another vec of dasts that hold each threads value
 	// create all execMap threads
 	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i)
     {
@@ -309,7 +314,7 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
         // TODO do we need to lock list for this check?
 
         int res =
-				pthread_create(&tid, NULL, (void *(*)(void *)) &execMap, NULL);
+				pthread_create(&tid, NULL, &execMap, NULL);
 
         // check if creations succeed
         if (res < 0)
@@ -329,6 +334,21 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
     }
 
     // ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
+    //TODO use pthread_join to block this func until map and shuffle are done
+
+
+
+
+
+
+
+
+
+
+
+
+    //TODO use pthread_mutex_destroy(mutex) to free mutex objects
+    //TODO use pthread_cond_destroy(cond) to free cond objects
 
 }
 
