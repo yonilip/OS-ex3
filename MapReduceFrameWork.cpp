@@ -50,7 +50,7 @@ pthread_cond_t conditionVar;
  */
 pthread_mutex_t timerMutex;
 
-pthread_mutex_t* inputListIterMutex;
+pthread_mutex_t inputListIterMutex;
 
 pthread_mutex_t shuffledIterMutex;
 
@@ -207,10 +207,10 @@ void* execMap(void*)
 	while (itemListIter != iterEnd)
 	{
 		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
-		pthread_mutex_lock(inputListIterMutex);
+		pthread_mutex_lock(&inputListIterMutex);
 		lowerBound = itemListIter;
 		safeAdvance(itemListIter, iterEnd);
-		pthread_mutex_unlock(inputListIterMutex);
+		pthread_mutex_unlock(&inputListIterMutex);
 
 		upperBound = lowerBound;
 		safeAdvance(upperBound, iterEnd);
@@ -302,7 +302,7 @@ void destroyMutexAndCond()
 	checkSysCall(res);
 	res = pthread_mutex_destroy(&shuffledIterMutex);
 	checkSysCall(res);
-	res = pthread_mutex_destroy(inputListIterMutex);
+	res = pthread_mutex_destroy(&inputListIterMutex);
 	checkSysCall(res);
 
 	res = pthread_cond_destroy(&conditionVar);
@@ -312,7 +312,7 @@ void destroyMutexAndCond()
 /**
  *
  */
-OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
+OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 									IN_ITEMS_LIST &itemsList,
 									int multiThreadLevel)
 {
@@ -326,7 +326,7 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	// initial all global variables according to input
 	mapBase = &mapReduce;
 	threadLevel = multiThreadLevel;
-	*itemsListGlobal = itemsList;
+	itemsListGlobal = &itemsList;
 
 
 	// call initializer first so we can run runMapReduceFramework multiple time;

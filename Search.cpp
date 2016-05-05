@@ -163,7 +163,7 @@ class SubStringMapReduce : public MapReduceBase
 
 int main(int argc, char* argv[])
 {
-    if (argc == 0) {
+    if (argc < 2) {
         std::cerr << "Usage: <substring to search> "
 							 "<folders, separated by space>" << std::endl;
         return 1;
