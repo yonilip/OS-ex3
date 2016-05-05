@@ -124,6 +124,17 @@ void pullDataFromMapping()
 			pthread_mutex_lock(&globalMapVecContainers[i].second);
 
 			MID_ITEM &frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
+/*			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
+			if(it != shuffleMap.end())
+			{
+				it->second.push_back(frontPair.second);
+			}
+			else
+			{
+				std::list<v2Base*> list;
+				list.push_back(frontPair.second);
+				shuffleMap.insert(std::pair<k2Base*, std::list<v2Base*>>(frontPair.first, list));
+			}*/
 			shuffleMap[frontPair.first].push_back(frontPair.second);
 			globalMapVecContainers[i].first.pop_front();
 
@@ -290,7 +301,7 @@ void mergeReducedContainers()
 	}
 }
 
-/**
+/**std::deque<OUT_ITEM>
  * compare between keys of OUT_ITEM pairs
  */
 bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
@@ -324,9 +335,7 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 									IN_ITEMS_LIST &itemsList,
 									int multiThreadLevel)
 {
-	pthread_t shuffThread;
-	int shuffRes = pthread_create(&shuffThread, NULL, &shuffle, NULL);
-	checkSysCall(shuffRes);
+
 
 
 	// ***** FIRST PART: INIT ALL VALUES: *****
@@ -356,6 +365,10 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 		checkSysCall(res);
 	}
 
+	pthread_t shuffThread;
+	int shuffRes = pthread_create(&shuffThread, NULL, &shuffle, NULL);
+	checkSysCall(shuffRes);
+
 	// ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
 	//join the execMap
 	for (int i = 0; i < threadLevel ; ++i)
@@ -380,6 +393,8 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	//start Reduce
 	for (int j = 0; j < threadLevel; ++j)
 	{
+		std::deque<OUT_ITEM> curDeque;
+		globalReduceContainers.push_back(curDeque);
 		int res = pthread_create(&threads[j], NULL, &execReduce, NULL);
 		checkSysCall(res);
 	}
