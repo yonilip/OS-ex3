@@ -1,10 +1,8 @@
 
 
-#include "MapReduceClient.h"
 #include "MapReduceFrameWork.h"
 #include <iostream>
 #include <fstream>
-#include <cstdlib>
 #include <string.h>
 #include <sstream>
 #include <dirent.h>
@@ -17,8 +15,7 @@ int multiThreadLevel = THREAD_LEVEL; //TODO get updated from given param
   this variable to work properly, the best solution i found was to make it
  global.. need to check it is legit
  **/
-string subString;
-using namespace std;
+std::string subString;
 
 
 /**
@@ -27,20 +24,22 @@ using namespace std;
 class DirNameKey : public k1Base
 {
 private:
-    string dirName;
+    std::string dirName;
 public:
     // TODO make sure constructor is needed
-    DirNameKey(string dirName) : dirName(dirName){};
+    DirNameKey(std::string dirName) : dirName(dirName){};
 
-    string getDirName()
+    std::string getDirName()
     {
         return dirName;
     }
 
     bool operator<(const k1Base &other) const
     {
-        DirNameKey* otherStr = const_cast<DirNameKey*>(&other);
-        return (dirName < otherStr->dirName);
+        //DirNameKey* otherStr = const_cast<DirNameKey*>(&other);
+        //return (dirName < otherStr->dirName);
+		DirNameKey& temp = const_cast<DirNameKey&>(other);
+		return dirName < temp.dirName;
     }
 };
 
@@ -61,10 +60,10 @@ public:
 class FileName : public k2Base, public k3Base
 {
 private:
-    string fileName;
+    std::string fileName;
 public:
-    FileName(string fileName) : fileName(fileName){};
-    string getFileName()
+    FileName(std::string fileName) : fileName(fileName){};
+    std::string getFileName()
     {
         return fileName;
     }
@@ -113,10 +112,10 @@ class SubStringMapReduce : public MapReduceBase
         FileName* fileName;
         FileValue* fileVal;
         DirNameKey* dir = const_cast<DirNameKey*>(&key);
-        string dirName = dir->getDirName();
+        std::string dirName = dir->getDirName();
         const char* cStr = dirName.c_str();
-        ifstream inn;
-        string str;
+        std::ifstream inn;
+        std::string str;
         DIR *pDIR;
         struct dirent *entry;
 
@@ -132,7 +131,7 @@ class SubStringMapReduce : public MapReduceBase
                     //ignore "." and ".."
                     inn.open(entry->d_name);
                     inn >> str;
-                    if(str.find(subString) != string.npos)
+                    if(str.find(subString) != std::string.npos)
                     {
                         // TODO check if this is the right place to use new
                         fileName = new FileName(str);
@@ -173,7 +172,7 @@ class SubStringMapReduce : public MapReduceBase
 int main(int argc, char* argv[])
 {
     if (argc == 0) {
-        std::cerr << "Usage: <substring to search> <folders, separated by space>" << endl;
+        std::cerr << "Usage: <substring to search> <folders, separated by space>" << std::endl;
         return 1;
     }
 
@@ -192,7 +191,7 @@ int main(int argc, char* argv[])
     {
         key = new DirNameKey(argv[i]);
         val = new DirVal();
-        dirPair = new pair(key, val);
+        dirPair = new std::pair(key, val);
         directories.push_back(*dirPair);
     }
 
@@ -208,7 +207,7 @@ int main(int argc, char* argv[])
         for(int i = 0;i < count;++i)
         {
             file = const_cast<FileName*>(item.first);
-            cout << file->getFileName() << endl;
+            std::cout << file->getFileName() << std::endl;
         }
     }
 

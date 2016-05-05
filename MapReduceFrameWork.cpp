@@ -8,22 +8,20 @@
 // first we need to create thread pool for the given number of thread,
 //
 
-#include <sys/time.h>
 #include "MapReduceFrameWork.h"
+#include <sys/time.h>
 #include <iostream>
 
 #include <vector>
 #include <map>
-#include <unordered_map>
+//#include <unordered_map>
 #include <deque>
-#include <algorithm>
+//#include <algorithm>
 
 #define CHUNK 10
 
 
 typedef std::pair<k2Base*, v2Base*> MID_ITEM;
-
-using namespace std;
 
 //global variables:
 
@@ -40,7 +38,7 @@ MapReduceBase* mapBase;
 /**
  * pointer to the cur place in inputVec
  */
-list<IN_ITEM>::iterator itemListIter;
+std::list<IN_ITEM>::iterator itemListIter;
 
 /**
  * condition for notify shuffle
@@ -69,15 +67,15 @@ int threadCount;
 pthread_mutex_t threadCountMutex;
 
 
-deque<std::pair<deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContainers;
+std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContainers;
 
-deque<deque<OUT_ITEM>> globalReduceContainers;
+std::deque<std::deque<OUT_ITEM>> globalReduceContainers;
 
-map<k2Base*, std::list<v2Base*>> shuffleMap;
+std::map<k2Base*, std::list<v2Base*>> shuffleMap;
 
 bool keepShuffle;
 
-map<k2Base*, std::list<v2Base*>>::iterator globalShuffledIter;
+std::map<k2Base*, std::list<v2Base*>>::iterator globalShuffledIter;
 
 OUT_ITEMS_LIST mappedAndReducedList;
 
@@ -88,7 +86,7 @@ void Emit2(k2Base* key, v2Base* val)
 {
 	pthread_mutex_lock(&globalMapVecContainers[tid].second);
 
-	globalMapVecContainers[tid].first.push_back(make_pair(key, val));
+	globalMapVecContainers[tid].first.push_back(std::make_pair(key, val));
 
 	pthread_mutex_unlock(&globalMapVecContainers[tid].second);
 }
@@ -98,7 +96,7 @@ void Emit2(k2Base* key, v2Base* val)
  */
 void Emit3 (k3Base* key, v3Base* val)
 {
-	globalReduceContainers[tid].push_back(make_pair(key, val));
+	globalReduceContainers[tid].push_back(std::make_pair(key, val));
 }
 
 
@@ -107,7 +105,7 @@ void checkSysCall(int res)
 	//TODO maybe not zero instead of neg
 	if (res < 0)
 	{
-		cout << "error" << endl;
+		std::cout << "error" << std::endl;
 		exit(1);
 	}
 }
@@ -177,13 +175,13 @@ template <class T>
 void safeAdvance(T& iter, const T& end)
 {
 	//size_t remaining((size_t) distance(iter, end));
-	size_t remaining = ((size_t) distance(iter, end));
+	size_t remaining = ((size_t) std::distance(iter, end));
 	int n = CHUNK;
 	if (remaining < n)
 	{
 		n = (int) remaining;
 	}
-	advance(iter, n);
+	std::advance(iter, n);
 }
 
 
@@ -201,11 +199,10 @@ void* execMap(void*)
 	pthread_mutex_unlock(&threadCountMutex);
 
 	pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
-	vector<MID_ITEM> threadVec;
+	std::deque<MID_ITEM> threadVec;
 	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);
 
-
-	list<IN_ITEM>::iterator lowerBound, upperBound;
+	std::list<IN_ITEM>::iterator lowerBound, upperBound;
 
 	while (itemListIter != iterEnd)
 	{
@@ -237,7 +234,7 @@ void* execReduce(void*)
 	tid = threadCount++;
 	pthread_mutex_unlock(&threadCountMutex);
 
-	map<k2Base*, std::list<v2Base*>>::iterator lowerBound, upperBound;
+	std::map<k2Base*, std::list<v2Base*>>::iterator lowerBound, upperBound;
 
 	while (globalShuffledIter != shuffleMap.end())
 	{
@@ -290,7 +287,7 @@ void mergeReducedContainers()
  */
 bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
 {
-	return left.first < right.first;
+	return (*left.first) < (*right.first);
 }
 
 /**
@@ -319,8 +316,6 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 									IN_ITEMS_LIST &itemsList,
 									int multiThreadLevel)
 {
-
-	//TODO start with init of shuffle
 	pthread_t shuffThread;
 	int shuffRes = pthread_create(&shuffThread, NULL, &shuffle, NULL);
 	checkSysCall(shuffRes);
@@ -338,7 +333,7 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	initializer();
 
 	// ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
-	vector<pthread_t> threads((unsigned long) threadLevel);
+	std::vector<pthread_t> threads((unsigned long) threadLevel);
 
 	// create all execMap threads
 	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i) //TODO is 2nd eval needed?
@@ -381,8 +376,9 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	}
 
 	mergeReducedContainers();
-	std::sort(mappedAndReducedList.begin(), mappedAndReducedList.end(),
-			  pairCompare);
+	mappedAndReducedList.sort(pairCompare);
+	//std::sort(mappedAndReducedList.begin(), mappedAndReducedList.end(),
+	//		  pairCompare);
 
 	destroyMutexAndCond();
 
