@@ -59,7 +59,7 @@ pthread_mutex_t shuffledIterMutex;
  */
 IN_ITEMS_LIST* itemsListGlobal;
 
-auto iterEnd = (*itemsListGlobal).end();
+IN_ITEMS_LIST::iterator iterEnd;
 
 thread_local int tid;
 
@@ -118,16 +118,15 @@ void pullDataFromMapping()
 {
 	for (int i = 0; i < (int) globalMapVecContainers.size(); ++i)
 	{
-		if (!globalMapVecContainers[i].first.empty())
+		while (!globalMapVecContainers[i].first.empty())
 		{
-			pthread_mutex_lock(&globalMapVecContainers[i].second); //TODO should we maybe lock for each pop instead till empty?
-			while (!globalMapVecContainers[i].first.empty())
-			{
-				// copy the pointers from the globalMapVecContainers at i and remove them
-				MID_ITEM &frontPair = globalMapVecContainers[i].first.front();
-				shuffleMap[frontPair.first].push_back(frontPair.second);
-				globalMapVecContainers[i].first.pop_front();
-			}
+			// copy the pointers from the globalMapVecContainers at i and remove them
+			pthread_mutex_lock(&globalMapVecContainers[i].second);
+
+			MID_ITEM &frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
+			shuffleMap[frontPair.first].push_back(frontPair.second);
+			globalMapVecContainers[i].first.pop_front();
+
 			pthread_mutex_unlock(&globalMapVecContainers[i].second);
 		}
 	}
@@ -174,14 +173,20 @@ void *shuffle(void*)
 template <class T>
 void safeAdvance(T& iter, const T& end)
 {
-	//size_t remaining((size_t) distance(iter, end));
+	/*//size_t remaining((size_t) distance(iter, end));
 	size_t remaining = ((size_t) std::distance(iter, end));
 	int n = CHUNK;
 	if (remaining < n)
 	{
 		n = (int) remaining;
 	}
-	std::advance(iter, n);
+	std::advance(iter, n);*/
+	for (int i = 0; i < CHUNK; ++i)
+	{
+		if (iter == end)
+			return;
+		++iter;
+	}
 }
 
 
@@ -198,9 +203,9 @@ void* execMap(void*)
 	tid = threadCount++;
 	pthread_mutex_unlock(&threadCountMutex);
 
-	pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
+	/*pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
 	std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
-	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);
+	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);*/
 
 	std::list<IN_ITEM>::iterator lowerBound, upperBound;
 
@@ -209,6 +214,7 @@ void* execMap(void*)
 		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
 		pthread_mutex_lock(&inputListIterMutex);
 		lowerBound = itemListIter;
+		//std::cout << "iter b4 adv: " << itemListIter
 		safeAdvance(itemListIter, iterEnd);
 		pthread_mutex_unlock(&inputListIterMutex);
 
@@ -265,7 +271,9 @@ void initializer()
 	conditionVar = PTHREAD_COND_INITIALIZER;
 	threadCountMutex = PTHREAD_MUTEX_INITIALIZER;
 	threadCount = 0;
+	iterEnd = (*itemsListGlobal).end();
 	itemListIter = (*itemsListGlobal).begin();
+	std::cout << "input list size: " << (*itemsListGlobal).size() << std::endl; //TODO del
 	keepShuffle = true;
 }
 
@@ -336,14 +344,20 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	std::vector<pthread_t> threads((unsigned long) threadLevel);
 
 	// create all execMap threads
-	for(int i = 0; i < threadLevel && itemListIter != iterEnd ; ++i) //TODO is 2nd eval needed?
+	for(int i = 0; i < threadLevel ; ++i) //TODO is 2nd eval needed?
 	{
+		pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
+		std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
+		//globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);
+		globalMapVecContainers.push_back(std::make_pair(threadVec,
+														threadMutex));
+
 		int res = pthread_create(&threads[i], NULL, &execMap, NULL);
 		checkSysCall(res);
 	}
 
 	// ***** THIRD PART: ADD SHUFFLE THREAD AND JOIN ALL THREADS *****
-	//join the threads
+	//join the execMap
 	for (int i = 0; i < threadLevel ; ++i)
 	{
 		int res = pthread_join(threads[i], NULL);
@@ -360,6 +374,7 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	threads.reserve((unsigned long) threadLevel);
 	threadCount = 0;
 
+	std::cout << "Shuffle map size: " << shuffleMap.size() << std::endl;
 	globalShuffledIter = shuffleMap.begin();
 
 	//start Reduce

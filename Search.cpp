@@ -26,8 +26,7 @@ class DirNameKey : public k1Base
 private:
     std::string dirName;
 public:
-    // TODO make sure constructor is needed
-    DirNameKey(std::string dirName) : dirName(dirName){};
+    DirNameKey(std::string& dirName) : dirName(dirName) {};
 
     std::string getDirName()
     {
@@ -59,7 +58,7 @@ class FileName : public k2Base, public k3Base
 private:
     std::string fileName;
 public:
-    FileName(std::string fileName) : fileName(fileName){};
+    FileName(std::string& fileName) : fileName(fileName){};
     std::string getFileName()
     {
         return fileName;
@@ -111,16 +110,16 @@ class SubStringMapReduce : public MapReduceBase
         const char* cStr = dirName.c_str(); //makes string into char*
         std::ifstream inn;
         std::string str;
-        DIR *pDIR;
-        struct dirent *entry;
 
         /**
          * the idea is to parse given directory given as key and add all file
          * in it to list using Emit function that was given to us
          */
-        if(pDIR = opendir(cStr))
+		DIR* pDIR = opendir(cStr);
+        if(pDIR)
         {
-            while(entry = readdir(pDIR))
+			struct dirent* entry = readdir(pDIR);
+            while(entry)
             {
 				//ignore "." and ".."
                 if(strcmp(entry->d_name, ".") != 0 &&
@@ -171,14 +170,16 @@ int main(int argc, char* argv[])
 
     //get the substring need to check and store it in a global variable so map
     // and reduce can use it
-    subString = argv[0];
+    subString = argv[1];
 
     IN_ITEMS_LIST directories;
     OUT_ITEMS_LIST result;
 
-    for(int i = 1; i < argc; i++)
+    for(int i = 2; i < argc; i++)
     {
-        k1Base* key = new DirNameKey(argv[i]);
+		std::string str = argv[i];
+        k1Base* key = new DirNameKey(str);
+		//std::string test = ((DirNameKey*)&key)->getDirName(); //TODO del
         v1Base* val = new DirVal();
         //dirPair = new std::pair(key, val); //TODO make pair and not pointers
 		IN_ITEM dirPair = std::make_pair(key, val);
