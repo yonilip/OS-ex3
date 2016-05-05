@@ -15,20 +15,15 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
-#include <list>
 #include <deque>
+#include <algorithm>
 
-#define SUCCEESS 0
 #define CHUNK 10
 
 
 typedef std::pair<k2Base*, v2Base*> MID_ITEM;
 
-
-
-//TODO redo includes and make clean h file
 using namespace std;
-
 
 //global variables:
 
@@ -59,6 +54,8 @@ pthread_mutex_t timerMutex;
 
 pthread_mutex_t* inputListIterMutex;
 
+pthread_mutex_t shuffledIterMutex;
+
 /**
  * pointer to itemsList
  */
@@ -72,31 +69,36 @@ int threadCount;
 pthread_mutex_t threadCountMutex;
 
 
-deque<pair<deque<MID_ITEM>, pthread_mutex_t>> globalVecContainers;
+deque<std::pair<deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContainers;
 
-map<k2Base*, deque<v2Base*>> shuffleMap;
+deque<deque<OUT_ITEM>> globalReduceContainers;
+
+map<k2Base*, std::list<v2Base*>> shuffleMap;
 
 bool keepShuffle;
 
+map<k2Base*, std::list<v2Base*>>::iterator globalShuffledIter;
+
+OUT_ITEMS_LIST mappedAndReducedList;
 
 /**
  *	push to the threads deque the pair k2 v2
  */
 void Emit2(k2Base* key, v2Base* val)
 {
-	pthread_mutex_lock(&globalVecContainers[tid].second);
+	pthread_mutex_lock(&globalMapVecContainers[tid].second);
 
-	globalVecContainers[tid].first.push_back(make_pair(key, val));
+	globalMapVecContainers[tid].first.push_back(make_pair(key, val));
 
-	pthread_mutex_unlock(&globalVecContainers[tid].second);
+	pthread_mutex_unlock(&globalMapVecContainers[tid].second);
 }
 
 /**
  *
  */
-void Emit3 (k3Base*, v3Base*)
+void Emit3 (k3Base* key, v3Base* val)
 {
-
+	globalReduceContainers[tid].push_back(make_pair(key, val));
 }
 
 
@@ -116,19 +118,19 @@ void checkSysCall(int res)
  */
 void pullDataFromMapping()
 {
-	for (int i = 0; i < (int) globalVecContainers.size(); ++i)
+	for (int i = 0; i < (int) globalMapVecContainers.size(); ++i)
 	{
-		if (!globalVecContainers[i].first.empty())
+		if (!globalMapVecContainers[i].first.empty())
 		{
-			pthread_mutex_lock(&globalVecContainers[i].second);
-			while (!globalVecContainers[i].first.empty())
+			pthread_mutex_lock(&globalMapVecContainers[i].second); //TODO should we maybe lock for each pop instead till empty?
+			while (!globalMapVecContainers[i].first.empty())
 			{
-				// copy the pointers from the globalVecContainers at i and remove them
-				MID_ITEM &frontPair = globalVecContainers[i].first.front();
-				shuffleMap[frontPair.first].push_back(frontPair.second); //TODO check that this inits a deque as the value on the first time
-				globalVecContainers[i].first.pop_front();
+				// copy the pointers from the globalMapVecContainers at i and remove them
+				MID_ITEM &frontPair = globalMapVecContainers[i].first.front();
+				shuffleMap[frontPair.first].push_back(frontPair.second);
+				globalMapVecContainers[i].first.pop_front();
 			}
-			pthread_mutex_unlock(&globalVecContainers[i].second);
+			pthread_mutex_unlock(&globalMapVecContainers[i].second);
 		}
 	}
 }
@@ -171,11 +173,13 @@ void *shuffle(void*)
  * advance iterator lowerBound in safe manner such that wont exceed the end of
  * the container
  */
-void safeAdvance(list<IN_ITEM>::iterator& iter)
+template <class T>
+void safeAdvance(T& iter, const T& end)
 {
-	size_t remaining((size_t) distance(iter, iterEnd));
+	//size_t remaining((size_t) distance(iter, end));
+	size_t remaining = ((size_t) distance(iter, end));
 	int n = CHUNK;
-	if (remaining < CHUNK)
+	if (remaining < n)
 	{
 		n = (int) remaining;
 	}
@@ -198,7 +202,7 @@ void* execMap(void*)
 
 	pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
 	vector<MID_ITEM> threadVec;
-	globalVecContainers[tid] = make_pair(threadVec, threadMutex);
+	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);
 
 
 	list<IN_ITEM>::iterator lowerBound, upperBound;
@@ -208,12 +212,11 @@ void* execMap(void*)
 		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
 		pthread_mutex_lock(inputListIterMutex);
 		lowerBound = itemListIter;
-		safeAdvance(itemListIter);
+		safeAdvance(itemListIter, iterEnd);
 		pthread_mutex_unlock(inputListIterMutex);
 
 		upperBound = lowerBound;
-		safeAdvance(upperBound);
-
+		safeAdvance(upperBound, iterEnd);
 
 		for( ; lowerBound != upperBound; ++lowerBound)
 		{
@@ -234,12 +237,23 @@ void* execReduce(void*)
 	tid = threadCount++;
 	pthread_mutex_unlock(&threadCountMutex);
 
+	map<k2Base*, std::list<v2Base*>>::iterator lowerBound, upperBound;
 
-	map<k2Base*, deque<v2Base*>>::iterator lowerBound, upperBound;
+	while (globalShuffledIter != shuffleMap.end())
+	{
+		pthread_mutex_lock(&shuffledIterMutex);
+		lowerBound = globalShuffledIter;
+		safeAdvance(globalShuffledIter, shuffleMap.end());
+		pthread_mutex_unlock(&shuffledIterMutex);
 
+		upperBound = lowerBound;
+		safeAdvance(upperBound, shuffleMap.end());
 
-
-
+		for (; lowerBound != upperBound; ++lowerBound)
+		{
+			mapBase->Reduce((*lowerBound).first, (*lowerBound).second);
+		}
+	}
 	pthread_exit(NULL);
 }
 
@@ -256,6 +270,46 @@ void initializer()
 	threadCount = 0;
 	itemListIter = (*itemsListGlobal).begin();
 	keepShuffle = true;
+}
+
+void mergeReducedContainers()
+{
+	for (int i = 0; i < (int) globalReduceContainers.size(); ++i)
+	{
+		while (!globalReduceContainers[i].empty())
+		{
+			OUT_ITEM item = globalReduceContainers[i].front();
+			mappedAndReducedList.push_back(item);
+			globalReduceContainers[i].pop_front();
+		}
+	}
+}
+
+/**
+ * compare between keys of OUT_ITEM pairs
+ */
+bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
+{
+	return left.first < right.first;
+}
+
+/**
+ * destroy pthread mutex and conditional objects
+ */
+void destroyMutexAndCond()
+{
+	//TODO should we make this more elegant?
+	int res = pthread_mutex_destroy(&timerMutex);
+	checkSysCall(res);
+	res = pthread_mutex_destroy(&threadCountMutex);
+	checkSysCall(res);
+	res = pthread_mutex_destroy(&shuffledIterMutex);
+	checkSysCall(res);
+	res = pthread_mutex_destroy(inputListIterMutex);
+	checkSysCall(res);
+
+	res = pthread_cond_destroy(&conditionVar);
+	checkSysCall(res);
 }
 
 /**
@@ -311,6 +365,8 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 	threads.reserve((unsigned long) threadLevel);
 	threadCount = 0;
 
+	globalShuffledIter = shuffleMap.begin();
+
 	//start Reduce
 	for (int j = 0; j < threadLevel; ++j)
 	{
@@ -324,16 +380,11 @@ OUT_ITEMS_LIST runMapRedueFramework(MapReduceBase &mapReduce,
 		checkSysCall(res);
 	}
 
+	mergeReducedContainers();
+	std::sort(mappedAndReducedList.begin(), mappedAndReducedList.end(),
+			  pairCompare);
 
+	destroyMutexAndCond();
 
-
-	//TODO use pthread_mutex_destroy(mutex) to free mutex objects
-
-	//TODO use pthread_cond_destroy(cond) to free cond objects
-
-}
-
-int main()
-{
-	//TODO delete!! this is lib not exec
+	return mappedAndReducedList;
 }
