@@ -199,7 +199,7 @@ void* execMap(void*)
 	pthread_mutex_unlock(&threadCountMutex);
 
 	pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
-	std::deque<MID_ITEM> threadVec;
+	std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
 	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);
 
 	std::list<IN_ITEM>::iterator lowerBound, upperBound;

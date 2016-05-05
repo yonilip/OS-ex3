@@ -7,9 +7,9 @@
 #include <sstream>
 #include <dirent.h>
 
-#define THREAD_LEVEL 10
+#define THREAD_LEVEL 7
 
-int multiThreadLevel = THREAD_LEVEL; //TODO get updated from given param
+int multiThreadLevel = THREAD_LEVEL;
 
 /** we get the substring as an argument to main, but map and reduce need
   this variable to work properly, the best solution i found was to make it
@@ -36,10 +36,7 @@ public:
 
     bool operator<(const k1Base &other) const
     {
-        //DirNameKey* otherStr = const_cast<DirNameKey*>(&other);
-        //return (dirName < otherStr->dirName);
-		DirNameKey& temp = const_cast<DirNameKey&>(other);
-		return dirName < temp.dirName;
+		return dirName < ((DirNameKey*)&other)->dirName;
     }
 };
 
@@ -69,9 +66,15 @@ public:
     }
     bool operator<(const k2Base &other) const
     {
-        FileName* otherStr = const_cast<FileName*>(&other);
-        return (fileName < otherStr->fileName);
+       /* FileName* otherStr = const_cast<FileName*>(&other);
+        return (fileName < otherStr->fileName);*/ //TODO del
+		return fileName < ((FileName*)&other)->fileName;
     }
+
+	bool operator<(const k3Base &other) const
+	{
+		return fileName < ((FileName*)&other)->fileName;
+	}
 };
 
 class FileValue : public v2Base
@@ -103,17 +106,9 @@ class SubStringMapReduce : public MapReduceBase
 {
     void Map(const k1Base *const key, const v1Base *const val) const
     {
-
-    /**
-     * this snippet of code was taken from OS group in facebook, someone
-     * posted a link for reading all files in given directory so i used it
-     * but im not sure if it works :(
-     */
-        FileName* fileName;
-        FileValue* fileVal;
-        DirNameKey* dir = const_cast<DirNameKey*>(&key);
+		DirNameKey* dir = ((DirNameKey*)&key);
         std::string dirName = dir->getDirName();
-        const char* cStr = dirName.c_str();
+        const char* cStr = dirName.c_str(); //makes string into char*
         std::ifstream inn;
         std::string str;
         DIR *pDIR;
@@ -127,22 +122,17 @@ class SubStringMapReduce : public MapReduceBase
         {
             while(entry = readdir(pDIR))
             {
-                if(strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0){
-                    //ignore "." and ".."
+				//ignore "." and ".."
+                if(strcmp(entry->d_name, ".") != 0 &&
+						strcmp(entry->d_name, "..") != 0){
                     inn.open(entry->d_name);
                     inn >> str;
-                    if(str.find(subString) != std::string.npos)
+					if (str.find(subString) != str.npos)
                     {
-                        // TODO check if this is the right place to use new
-                        fileName = new FileName(str);
-                        fileVal = new FileValue();
+						FileName* fileName = new FileName(str); //TODO maybe make global container that holds these pointers for deletion
+						FileValue* fileVal = new FileValue();
                         Emit2(fileName, fileVal);
                         //TODO check where to delete
-                        // pointers are sent to emit function which puts it in
-                        // data structure (container) according to current
-                        // thread.
-                        // need to make sure we free all allocated memory
-                        // correctly.
                     }
                 }
                 closedir(pDIR);
@@ -153,12 +143,14 @@ class SubStringMapReduce : public MapReduceBase
     void Reduce(const k2Base *const key, const V2_LIST &vals) const
     {
         FileCount* fileCount;
-        FileName* fileName = const_cast<FileName*>(&key);
+        //FileName* fileName = const_cast<FileName*>(&key);
+		FileName* fileName = ((FileName*)&key);
         FileValue* fileVal;
         int counter = 0;
         for(v2Base* val : vals)
         {
-            fileVal = const_cast<FileValue*>(&val);
+            //fileVal = const_cast<FileValue*>(&val);
+			fileVal = ((FileValue*)&val);
             counter += fileVal->getFileVal();
         }
         fileCount = new FileCount(counter);
@@ -172,7 +164,8 @@ class SubStringMapReduce : public MapReduceBase
 int main(int argc, char* argv[])
 {
     if (argc == 0) {
-        std::cerr << "Usage: <substring to search> <folders, separated by space>" << std::endl;
+        std::cerr << "Usage: <substring to search> "
+							 "<folders, separated by space>" << std::endl;
         return 1;
     }
 
@@ -182,31 +175,27 @@ int main(int argc, char* argv[])
 
     IN_ITEMS_LIST directories;
     OUT_ITEMS_LIST result;
-    DirNameKey* key;
-    DirVal* val;
-    IN_ITEM* dirPair;
-
 
     for(int i = 1; i < argc; i++)
     {
-        key = new DirNameKey(argv[i]);
-        val = new DirVal();
-        dirPair = new std::pair(key, val);
-        directories.push_back(*dirPair);
+        k1Base* key = new DirNameKey(argv[i]);
+        v1Base* val = new DirVal();
+        //dirPair = new std::pair(key, val); //TODO make pair and not pointers
+		IN_ITEM dirPair = std::make_pair(key, val);
+        directories.push_back(dirPair); //TODO does deleting the contents of this delete key and val?
     }
 
-    SubStringMapReduce* reducer = new SubStringMapReduce();
-    result = runMapReduceFramework(*reducer, directories, multiThreadLevel);
+	SubStringMapReduce searchMapReduce;
+    result = runMapReduceFramework(searchMapReduce, directories,
+								   multiThreadLevel);
 
-    FileName* file;
-    FileCount* fileCount;
     for(OUT_ITEM item : result)
     {
-        fileCount = const_cast<FileCount*>(item.second);
+		FileCount* fileCount = ((FileCount*)&item.second);
         int count = fileCount->getFileCount();
-        for(int i = 0;i < count;++i)
+        for(int i = 0;i < count; ++i)
         {
-            file = const_cast<FileName*>(item.first);
+			FileName* file = ((FileName*)&item.first);
             std::cout << file->getFileName() << std::endl;
         }
     }
