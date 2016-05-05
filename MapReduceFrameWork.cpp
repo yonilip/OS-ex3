@@ -30,6 +30,16 @@ typedef std::pair<k2Base*, v2Base*> MID_ITEM;
  */
 int threadLevel;
 
+
+struct shuffleComp{
+	bool operator()(const k2Base* first, const k2Base* second)
+	{
+		return (*first)<(*second);
+	}
+};
+
+
+
 /**
  * instance of client map and reduce object functions
  */
@@ -71,7 +81,7 @@ std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContain
 
 std::deque<std::deque<OUT_ITEM>> globalReduceContainers;
 
-std::map<k2Base*, std::list<v2Base*>> shuffleMap;
+std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
 
 bool keepShuffle;
 
@@ -123,19 +133,23 @@ void pullDataFromMapping()
 			// copy the pointers from the globalMapVecContainers at i and remove them
 			pthread_mutex_lock(&globalMapVecContainers[i].second);
 
-			MID_ITEM &frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
-/*			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
-			if(it != shuffleMap.end())
-			{
-				it->second.push_back(frontPair.second);
-			}
-			else
-			{
-				std::list<v2Base*> list;
-				list.push_back(frontPair.second);
-				shuffleMap.insert(std::pair<k2Base*, std::list<v2Base*>>(frontPair.first, list));
-			}*/
+			MID_ITEM frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
+//			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
+//			if(it != shuffleMap.end())
+//			{
+//
+//
+//				it->second.push_back(frontPair.second);
+//			}
+//			else
+//			{
+//				std::list<v2Base*> list;
+//				list.push_back(frontPair.second);
+//				shuffleMap.insert(std::pair<k2Base*, std::list<v2Base*>>(frontPair.first, list));
+//			}
+
 			shuffleMap[frontPair.first].push_back(frontPair.second);
+
 			globalMapVecContainers[i].first.pop_front();
 
 			pthread_mutex_unlock(&globalMapVecContainers[i].second);
