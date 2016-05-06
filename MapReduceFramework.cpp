@@ -8,7 +8,7 @@
 // first we need to create thread pool for the given number of thread,
 //
 
-#include "MapReduceFrameWork.h"
+#include "MapReduceFramework.h"
 #include <sys/time.h>
 #include <iostream>
 

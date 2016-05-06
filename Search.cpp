@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "MapReduceFrameWork.h"
+#include "MapReduceFramework.h"
 #include <iostream>
 #include <fstream>
 #include <string.h>

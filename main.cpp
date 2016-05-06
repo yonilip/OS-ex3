@@ -1,6 +1,6 @@
 #include <iostream>
 //#include "MapReduceClient.h"
-#include "MapReduceFrameWork.h"
+#include "MapReduceFramework.h"
 
 
 using namespace std;
