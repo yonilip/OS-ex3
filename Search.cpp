@@ -19,7 +19,6 @@ int multiThreadLevel = THREAD_LEVEL;
  **/
 std::string subString;
 
-
 /**
  * inherits from k1 Base, holds directory name
  */
@@ -96,6 +95,7 @@ public:
     ~FileCount(){}
 };
 
+std::list<std::pair<FileName2*, FileValue*> > destroyContainerK2;
 
 class SubStringMapReduce : public MapReduceBase
 {
@@ -124,6 +124,7 @@ class SubStringMapReduce : public MapReduceBase
                         ss >> s;
 						FileName2* fileName = new FileName2(s);//TODO maybe make global container that holds these pointers for deletion
                         FileValue* fileVal = new FileValue();
+                        destroyContainerK2.push_back(std::make_pair(fileName, fileVal));
                         Emit2((k2Base*)fileName, (v2Base*)fileVal);
                         //TODO check where to delete
                     }
@@ -187,10 +188,29 @@ int main(int argc, char* argv[])
             std::cout << file->fileName << std::endl;
         }
     }
-
     //TODO is it enough to use clear? should we iterate and actually delete each pointer?
+
+    for(IN_ITEM item1 : directories)
+    {
+       delete(item1.first);
+       delete(item1.second);
+    }
     directories.clear();
-
+    for(OUT_ITEM item2 : result)
+    {
+        delete(item2.first);
+        delete(item2.second);
+    }
     result.clear();
-
+/*    for (std::pair<FileName2*, FileValue*> item3 : destroyContainerK2)
+    {
+        if(item3.first != nullptr){ //TODO make sure duplicate k2's are del'd
+            delete(item3.first);
+        }
+        if (item3.second != nullptr)
+        {
+            delete(item3.second);
+        }
+    }*/
+    destroyContainerK2.clear();
 }
