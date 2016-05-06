@@ -110,7 +110,7 @@ class SubStringMapReduce : public MapReduceBase
     {
 		DirNameKey* dir = ((DirNameKey*)&key);
         //std::string dirName = dir->getDirName();
-		char* dirName = dir->getDirName();
+		//char* dirName = dir->getDirName();
         //const char* cStr = dirName.c_str(); //makes string into char*
         std::ifstream inn;
         std::string str;
@@ -119,8 +119,8 @@ class SubStringMapReduce : public MapReduceBase
          * the idea is to parse given directory given as key and add all file
          * in it to list using Emit function that was given to us
          */
-		DIR* pDIR = opendir(dirName);
-        if(pDIR)
+		DIR* pDIR;
+        if((pDIR= opendir(dir->getDirName())) != NULL)
         {
 			struct dirent* entry = readdir(pDIR);
             while(entry)
@@ -181,13 +181,13 @@ int main(int argc, char* argv[])
 
     for(int i = 2; i < argc; i++)
     {
-		//std::string str = argv[i];
-        k1Base* key = new DirNameKey(argv[i]);
+		char* str = argv[i];
+        k1Base* key = new DirNameKey(str);
 		//std::string test = ((DirNameKey*)&key)->getDirName(); //TODO del
         v1Base* val = new DirVal();
         //dirPair = new std::pair(key, val); //TODO make pair and not pointers
-		IN_ITEM dirPair = std::make_pair(key, val);
-        directories.push_back(dirPair); //TODO does deleting the contents of this delete key and val?
+		//IN_ITEM dirPair = std::make_pair(key, val);
+        directories.push_back(std::make_pair(key, val)); //TODO does deleting the contents of this delete key and val?
     }
 
 	SubStringMapReduce searchMapReduce;

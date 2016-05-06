@@ -80,7 +80,7 @@ class derivedMapReduce: public MapReduceBase {
 
 
 int NUM_THREADS = 20;
-int INNER_LOOP = 5;
+int INNER_LOOP = 700;
 
 int NUM_START_OBJECTS = (INNER_LOOP*(INNER_LOOP-1))/2;
 int NUM_FINAL_CONTAINERS = INNER_LOOP-1;
