@@ -23,18 +23,18 @@ std::string subString;
  */
 class DirNameKey : public k1Base
 {
-private:
+public:
     //std::string dirName;
 	char* dirName;
-public:
     //DirNameKey(std::string& dirName) : dirName(dirName) {};
 	DirNameKey(char* dirName) : dirName(dirName) {};
 
 
-	char* getDirName()
-    {
-        return dirName;
-    }
+    ~DirNameKey(){}
+//	char* getDirName()
+//    {
+//        return dirName;
+//    }
 
     bool operator<(const k1Base &other) const
     {
@@ -45,10 +45,10 @@ public:
 //TODO does it matter if its not null as the given example on the ex description?
 class DirVal : public v1Base
 {
-private:
-    int dirVal;
 public:
+    int dirVal;
     DirVal() : dirVal(0){}
+    ~DirVal(){}
 };
 
 /**
@@ -58,14 +58,17 @@ public:
 //TODO check if multiple inheritence is allwed, does it get the wanted result in this case?
 class FileName : public k2Base, public k3Base
 {
-private:
-    std::string fileName;
 public:
-    FileName(std::string& fileName) : fileName(fileName){};
-    std::string getFileName()
-    {
-        return fileName;
-    }
+    //std::string fileName;
+    char* fileName;
+
+    FileName(char* filename) : fileName(filename){};
+    ~FileName(){}
+    //FileName(std::string& fileName) : fileName(fileName){};
+//    char* getFileName()
+//    {
+//        return fileName;
+//    }
     bool operator<(const k2Base &other) const
     {
        /* FileName* otherStr = const_cast<FileName*>(&other);
@@ -81,26 +84,28 @@ public:
 
 class FileValue : public v2Base
 {
-private:
-    int fileVal;
 public:
+    int fileVal;
+
     FileValue() : fileVal(1){};
-    int getFileVal()
-    {
-        return fileVal;
-    }
+    ~FileValue(){}
+//    int getFileVal()
+//    {
+//        return fileVal;
+//    }
 };
 
 class FileCount : public v3Base
 {
-private:
-    int fileCount;
 public:
+    int fileCount;
+
     FileCount(int count) : fileCount(count){};
-    int getFileCount()
-    {
-        return fileCount;
-    }
+    ~FileCount(){}
+//    int getFileCount()
+//    {
+//        return fileCount;
+//    }
 };
 
 
@@ -120,26 +125,28 @@ class SubStringMapReduce : public MapReduceBase
          * in it to list using Emit function that was given to us
          */
 		DIR* pDIR;
-        if((pDIR= opendir(dir->getDirName())) != NULL)
+        if(pDIR = opendir("/cs/stud/danielle.kut/ClionProjects"))
         {
-			struct dirent* entry = readdir(pDIR);
-            while(entry)
+			struct dirent* entry;
+            while(entry = readdir(pDIR))
             {
 				//ignore "." and ".."
                 if(strcmp(entry->d_name, ".") != 0 &&
 						strcmp(entry->d_name, "..") != 0){
-                    inn.open(entry->d_name);
-                    inn >> str;
-					if (str.find(subString) != str.npos)
+                    //inn.open(entry->d_name);
+                    //inn >> str;
+					//if (str.find(subString) != str.npos)
+                    char* tes = entry->d_name;
+                    if (strstr(entry->d_name, subString.c_str()))
                     {
-						FileName* fileName = new FileName(str); //TODO maybe make global container that holds these pointers for deletion
+						FileName* fileName = new FileName("OS"); //TODO maybe make global container that holds these pointers for deletion
 						FileValue* fileVal = new FileValue();
-                        Emit2(fileName, fileVal);
+                        Emit2((k2Base*)fileName, (v2Base*)fileVal);
                         //TODO check where to delete
                     }
                 }
-                closedir(pDIR);
             }
+            closedir(pDIR);
         }
     }
 
@@ -154,10 +161,10 @@ class SubStringMapReduce : public MapReduceBase
         {
             //fileVal = const_cast<FileValue*>(&val);
 			fileVal = ((FileValue*)&val);
-            counter += fileVal->getFileVal();
+            counter += fileVal->fileVal;
         }
         fileCount = new FileCount(counter);
-        Emit3(fileName, fileCount);
+        Emit3((k3Base* )fileName, (v3Base*)fileCount);
         //TODO check where to delete
         //delete(fileCount);
         //delete(fileName);
@@ -197,11 +204,11 @@ int main(int argc, char* argv[])
     for(OUT_ITEM item : result)
     {
 		FileCount* fileCount = ((FileCount*)&item.second);
-        int count = fileCount->getFileCount();
+        int count = fileCount->fileCount;
         for(int i = 0;i < count; ++i)
         {
 			FileName* file = ((FileName*)&item.first);
-            std::cout << file->getFileName() << std::endl;
+            std::cout << file->fileName << std::endl;
         }
     }
 

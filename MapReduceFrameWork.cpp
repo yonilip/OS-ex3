@@ -323,6 +323,16 @@ bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
 	return (*left.first) < (*right.first);
 }
 
+/*
+struct pairCompare{
+	bool operator()(const OUT_ITEM& first, const OUT_ITEM& second)
+	{
+		return (*first.first)<(*second.first);
+	}
+};
+
+*/
+
 /**
  * destroy pthread mutex and conditional objects
  */
