@@ -298,7 +298,7 @@ void initializer()
 	threadCount = 0;
 	iterEnd = (*itemsListGlobal).end();
 	itemListIter = (*itemsListGlobal).begin();
-	std::cout << "input list size: " << (*itemsListGlobal).size() << std::endl; //TODO del
+	//std::cout << "input list size: " << (*itemsListGlobal).size() << std::endl; //TODO del
 	keepShuffle = true;
 }
 
@@ -403,7 +403,7 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	threads.reserve((unsigned long) threadLevel);
 	threadCount = 0;
 
-	std::cout << "Shuffle map size: " << shuffleMap.size() << std::endl;
+	//std::cout << "Shuffle map size: " << shuffleMap.size() << std::endl; //TODO del
 	globalShuffledIter = shuffleMap.begin();
 
 	//start Reduce

@@ -103,15 +103,17 @@ class SubStringMapReduce : public MapReduceBase
     {
 		DirNameKey* dir = ((DirNameKey *)key);
         std::string dirName = dir->dirName;
+		(void)val;
         /**
          * the idea is to parse given directory given as key and add all file
          * in it to list using Emit function that was given to us
          */
-		DIR* pDIR;
-        if(pDIR = opendir(dirName.c_str()))
+		DIR* pDIR = opendir(dirName.c_str());
+        if(pDIR)
         {
-			struct dirent* entry;
-            while(entry = readdir(pDIR))
+			struct dirent* entry = readdir(pDIR);
+
+			do
             {
 				//ignore "." and ".."
                 if(strcmp(entry->d_name, ".") != 0 &&
@@ -122,15 +124,16 @@ class SubStringMapReduce : public MapReduceBase
                         std::string s;
                         ss << entry->d_name;
                         ss >> s;
-						FileName2* fileName = new FileName2(s);//TODO maybe make global container that holds these pointers for deletion
+						FileName2* fileName = new FileName2(s);
                         FileValue* fileVal = new FileValue();
                         destroyContainerK2.push_back(std::make_pair(fileName, fileVal));
                         Emit2((k2Base*)fileName, (v2Base*)fileVal);
                         //TODO check where to delete
                     }
                 }
-            }
-            closedir(pDIR);
+				entry = readdir(pDIR);
+            } while(entry) ;
+			closedir(pDIR);
         }
     }
 
