@@ -133,7 +133,7 @@ void pullDataFromMapping()
 			// copy the pointers from the globalMapVecContainers at i and remove them
 			pthread_mutex_lock(&globalMapVecContainers[i].second);
 
-			MID_ITEM frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
+			MID_ITEM& frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
 //			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
 //			if(it != shuffleMap.end())
 //			{

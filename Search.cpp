@@ -26,7 +26,7 @@ class DirNameKey : public k1Base
 {
 public:
     std::string dirName;
-    DirNameKey(std::string& dirName) : dirName(dirName) {};
+    DirNameKey(std::string dirName) : dirName(dirName) {};
     ~DirNameKey(){}
 
     bool operator<(const k1Base &other) const
@@ -198,11 +198,11 @@ int main(int argc, char* argv[])
     directories.clear();
     for(OUT_ITEM item2 : result)
     {
-        delete(item2.first);
+        //delete(item2.first); // TODO not deleting this but allowing it to be del'd in destroyContainerK2 should delete all allocated
         delete(item2.second);
     }
     result.clear();
-/*    for (std::pair<FileName2*, FileValue*> item3 : destroyContainerK2)
+    for (std::pair<FileName2*, FileValue*> item3 : destroyContainerK2)
     {
         if(item3.first != nullptr){ //TODO make sure duplicate k2's are del'd
             delete(item3.first);
@@ -211,6 +211,6 @@ int main(int argc, char* argv[])
         {
             delete(item3.second);
         }
-    }*/
+    }
     destroyContainerK2.clear();
 }
