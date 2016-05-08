@@ -1,1 +1,271 @@
-OS /home/yonilip/ClionProjects /home/yonilip/ClionProjects/fakeFolders /home/yonilip/ClionProjects
+yonilipman, danielle.kut
+Yonatan Lipman (305629750), Danielle Kutner (204094460)
+EX: 3
+
+FILES:
+README -- This file
+Makefile -- makefile for the project, compiles the library and a demo
+            of its use called Search. creates tar and cleans the file
+MapReduceFramework.cpp -- MapReduceFramework library implementation
+Search.cpp -- Demo of the framework that searches for a substring in file names
+              in the given directories
+
+REMARKS:
+We designed the framework such that the main function runMapReduceFramework
+runs each part of the process in different modules.
+Specifically, the framework will create threads that handle the mapping and
+reduction. each thread will handle a chunk of the given data at a time and
+we make sure that there is a seperation between the shared data structures
+using pthread's mutex feature.
+In order to tell between the different threads and their data structures and
+mutexes, we used thread_local, which allows to have a global int that is unique
+to each thread.
+When shuffle is signaled to start working, it iterates over all of the
+mapping containers and works on them. mapping in chunks ensures that we dont
+work too hard when shuffling in each iteration over the containers so each time
+the containers are small when not empty. we ensure that we emptied all of the
+containers by iterating one final time after the mapping process is finished.
+We used deque and map as the containers of choice and List when we had to
+comply to the given header files.
+Notice that each time that the framework runs, it is initialized and terminated
+properly such that it is possible to run it multiple times in the same process.
+
+ANSWERS:
+
+1) Design:
+   The framework will create a pipe for each thread created.
+   Mapping and Shuffling:
+   Each thread has a pipe that reads chunks of k1 and v1 from the main
+   data given to read. ExecMap will write the emitted k2 and v2 to fd's that
+   are unique to each thread. Shuffle will read the k2 and v2's from each
+   fd that map wrote to and will write to a single fd that will hold the
+   shuffled data. shuffle will choose the pipe to read from using select.
+   Reduce:
+   Each thread has a pipe that reads from the shuffled data fd the k2 and the
+   list of v2's. ExecReduce will write the emitted k3 and v3 to the main
+   threads mapped and reduced data fd.
+
+   The data that is read and written will be composed entirely from pointers,
+   such that it is easier to read and write known chunks of bytes and let the
+   user handle the dereferencing of the pointers.
+
+   Generally lists are good enough for the needed result.
+   ExecMap could use lists of k1*,v1* and lists of k2*,v2* for storing the
+   mapped pointers. Shuffle would have a list of (k2*,list(v2*)).
+   ExecReduce would get shuffle's list and have its own list of k3*,v3*
+   that would be returned to the user.
+
+   In order for the consumers to know that there is no more data,
+   we will make use of boolean variables.
+   Such that when reading data for mapping, we will keep reading until the
+   var will turn false. Shuffle will use the select function to choose which
+   fd to read from when the fd is ready. when ExecMap is done writing, it will
+   close the fd thus select could use the fd to read from it using pipe.
+   when 0 will be read then shuffle will know that it is done with the fd
+   in context.
+   ExecReduce will work in a similar fashion and such will the end of the
+   frameworks run.
+
+
+
+2) We would use 7 threads for multiThreadLevel.
+   in our implementation shuffle thread does not count as one of the thread in
+   multiThreadLevel (creating multiThreadLevel amount of
+   execMap and execReduce).
+   and ignoring main thread since it will waits (for join) most time framework
+   runs, this way 8 threads can run on each core in parallel manner:
+   7 will execute map and reduce actions, and one will shuffle.
+
+3)
+    a. Utilizing multi-cores:
+
+        a- Nira:
+        Nira's thread will run on one core at most and will not utilize
+        multi-core actions.
+        there is no concurrency.
+        b- Moti:
+        we cannot know for sure if Moti's program will support multi-threading.
+        it is able to utilize seperate cores but won't necessarily do so.
+        c- Danny:
+        Danny uses user-level threads so one thread will run at any given time.
+        Concurrency is not achieved.
+        d- Galit:
+        Galit has the best approach, each thread is actually a process, so the
+        OS will try and take advantage of multi-core abilities: running each
+        process on an available core.
+
+     b. Creating sophisticated scheduler ability:
+
+        a- Nira:
+        each time main thread will get run time from the kernel, the thread
+        will run.
+        b- Moti:
+        OS responsible of scheduling kernel level threads,
+        it can be affected by using mutexes, condition variables, barriers...
+        c- Danny:
+        user level threads scheduling isnt difficult and can be implemented
+        using scheduling
+        algorithm (such as Round Robin that we implemented in ex2).
+        d- Galit:
+        OS would be in charge of scheduling each process and circumventing it
+        would be very difficult.
+
+     c. Communication between threads and processes:
+
+        a- Nira:
+        thread can easily communicate with itself
+        b- Moti:
+        threads share the same memory pool of their process. We can easily
+        implement a communication between memory using locks and flags.
+        c- Danny:
+        we can access the same memory for each thread by locks and flags,
+        communication is fast.
+        d- Galit:
+        communication between processes will take a long time since multiple
+        processes communication is done by reading and writing into the
+        pipe) which is slower then shared memory
+        communication (Danny and Moti).
+
+     d. Ability to progress while a thread is blocked:
+
+         a- Nira:
+         Nira has only one thread so in case it will be blocked, the whole
+         process will be blocked.
+         b- Moti:
+         in case one thread is blocked, there will be other thread that c
+         ontinue with the map reduce work ad the process will continue.
+         c- Danny:
+         User-level threads doesn't cannot progress while a certain thread
+         is blocked.
+         OS takes all user level threads as one unit, so the process will be
+         blocked.
+         d- Galit:
+         blocking one thread will not block others. OS will manage each process
+         and runs them on different cores when possible. If a thread is blocked
+         then the OS will run another process in its place.
+
+
+     e. Overall speed:
+
+          a- Nira:
+          In case context switch is expensive, Nira's solution will be
+          better then Moti's and Galit's since a single thread is running-
+          no context switching!
+          in most cases framework contains many items so the major time would
+          be spent in the map and reduce stages where more threads/processes
+          would save time using concurrency
+          b- Moti:
+          Moti's solution will be the faster among othe solutions.
+          creation and communication time are faster using
+          threads over processes (threads communicate
+          through shared memory in contrast to I/O actions). synchronization
+          of our shared data forces us to use mutexes and flags which also take
+          time but we think in overall this will probably be the best way to
+          implement this task.
+          c- Danny:
+          Danny uses user level threads, not creating separate processes or
+          kernel level threads.
+          His solution may still be faster than Nira's depending on the cost
+          vs benefit of the context switches.
+          But may be slower than others
+          for the same reason Nira's will most likely be slower. And may
+          be faster than the other's due to the lower cost of creating
+          user-level threads and doing context switches.
+          d- Galit:
+          Galit solution will be fast since Galit since it takes advantage of
+          any possible multi-cores available on the machine the
+          program runs on.
+          it can be slower than multithreading due to the time it takes to
+          create processes and the time it takes us to switch between them.
+
+4)
+
+    Kernel-level thread:
+        Global variables
+        Heap
+
+    User-level thread:
+        Global variables
+        Heap
+
+    Process:
+        None
+
+
+5) Livelock vs Deadlock:
+   Although they are similar in a way, we will notice that when in deadlock,
+   the thread will get stuck waiting for a condition that wont be fulfilled.
+   Livelock on the other hand wont have the threads waiting but it wont make
+   any progress since the threads will always respond to each other creating
+   an endless chain of replies to one another.
+
+   Deadlock example:
+   ----------------------------
+   Process 0:
+
+   flag[0] = true;
+   while (flag[1]); // does nothing until false
+   /* critical section and actions */
+   flag[0] = false;
+
+   Process 1:
+
+   flag[1] = true;
+   while (flag[0]); // does nothing until false
+   /* critical section and actions */
+   flag[1] = false;
+
+   // notice that if both flags are true before getting to the while command,
+   // they will never reach the critical section and stay in deadlock.
+
+   Livelock example:
+   ----------------------------
+   Process 0:
+
+   flag[0] = true;
+   while (flag[1])
+   {
+        flag[0] = false;
+        // wait constant time
+        flag[0] = true;
+   }
+   /* critical section and actions */
+   flag[0] = false;
+
+   Process 1:
+
+   flag[1] = true;
+   while (flag[0])
+   {
+        flag[1] = false;
+        // wait constant time
+        flag[1] = true;
+   }
+   /* critical section and actions */
+   flag[1] = false;
+
+   If both flags are true, then p0 makes flag0 false and p1 makes flag1 false
+   and then p0 makes flag0 true and p1 makes flag1 true we will experience
+   livelock.
+
+6) Process|Arrival Time| Running Time| Priority (higher number-higher priority)
+   P1      0                10           1
+   P2      1                1            3
+   P3      3                2            2
+   P4      7                12           3
+   P5      8                1            1
+
+   RR (quantum = 2):
+       -Turnaround time: (18+2+4+19+4)/5 = 9.4
+       -Average wait time: 8+1+2+7+3)/5 = 4.2
+
+   FCFS:
+       -Turnaround time: (10+10+10+18+18)/5 = 13.2
+       -Average wait time: (0+9+8+6+17)/5 = 8
+   SRTF:
+       -Turnaround time: (14+1+2+19+1)/5 = 7.4
+       -Average wait time: (4+0+0+7+0)/5 = 2.2
+
+   Priority Scheduling:
+       -Turnaround time : (25+1+2+12+18)/5 = 11.6
+       -Average wait time : (15+0+0+0+17)/5
