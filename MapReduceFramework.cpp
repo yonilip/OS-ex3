@@ -1,3 +1,14 @@
+
+//TODO:::
+/*
+ * README
+ * clean code and doc
+ * error handling
+ * valgrind to ask someone
+ *
+ */
+
+
 /**
  * first we need to create thread pool for the given number of thread,
  * so we wont create mmore threads while program is runnunig.
@@ -14,9 +25,7 @@
 
 #include <vector>
 #include <map>
-//#include <unordered_map>
 #include <deque>
-//#include <algorithm>
 #include <fstream>
 
 #define CHUNK 10
