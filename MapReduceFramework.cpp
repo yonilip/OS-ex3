@@ -270,7 +270,7 @@ void* execMap(void*)
 	while (itemListIter != iterEnd)
 	{
 		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
-		int lockRes = pthread_mutex_lock(&inputListIterMutex);
+		lockRes = pthread_mutex_lock(&inputListIterMutex);
 		checkSysCall2(lockRes);
 		lowerBound = itemListIter;
 		//std::cout << "iter b4 adv: " << itemListIter
@@ -285,7 +285,7 @@ void* execMap(void*)
 			mapBase->Map((*lowerBound).first, (*lowerBound).second);
 		}
 		// notify shuffle thread that there is un-empty container
-		int unlockRes = pthread_cond_signal(&conditionVar);
+		unlockRes = pthread_cond_signal(&conditionVar);
 		checkSysCall2(unlockRes);
 	}
 
@@ -307,11 +307,11 @@ void* execReduce(void*)
 
 	while (globalShuffledIter != shuffleMap.end())
 	{
-		int lockRes = pthread_mutex_lock(&shuffledIterMutex);
+		lockRes = pthread_mutex_lock(&shuffledIterMutex);
 		checkSysCall2(lockRes);
 		lowerBound = globalShuffledIter;
 		safeAdvance(globalShuffledIter, shuffleMap.end());
-		int unlockRes = pthread_mutex_unlock(&shuffledIterMutex);
+		unlockRes = pthread_mutex_unlock(&shuffledIterMutex);
 		checkSysCall2(unlockRes);
 
 		upperBound = lowerBound;
@@ -394,14 +394,14 @@ void destroyMutexAndCond()
 void prepareForEndOfFramework()
 {
 	destroyMutexAndCond();
-	for (int i = 0; i < globalMapVecContainers.size(); ++i)
+	for (int i = 0; i < (int) globalMapVecContainers.size(); ++i)
 	{
 		globalMapVecContainers[i].first.clear();
 		int res = pthread_mutex_destroy(&globalMapVecContainers[i].second);
 		checkSysCall(res);
 	}
 	globalMapVecContainers.clear();
-	for (int j = 0; j < globalReduceContainers.size(); ++j)
+	for (int j = 0; j < (int) globalReduceContainers.size(); ++j)
 	{
 		globalReduceContainers[j].clear();
 	}
