@@ -17,9 +17,16 @@
 //#include <unordered_map>
 #include <deque>
 //#include <algorithm>
+#include <fstream>
 
 #define CHUNK 10
 
+
+#define SEC_TO_MICRO 1000000
+#define MICRO_TO_NANO 1000
+
+#define GET_ELAPSED_TIME ( ((logEnd.tv_sec - logBegin.tv_sec) * SEC_TO_MICRO) \
+ 						+(logEnd.tv_usec - logBegin.tv_usec) ) * MICRO_TO_NANO;
 
 typedef std::pair<k2Base*, v2Base*> MID_ITEM;
 
@@ -98,6 +105,8 @@ std::map<k2Base*, std::list<v2Base*>>::iterator globalShuffledIter;
 OUT_ITEMS_LIST mappedAndReducedList;
 
 
+std::ofstream ofs;
+
 
 void checkSysCall(int res)
 {
@@ -121,7 +130,28 @@ void checkSysCall2(int res)
 	}
 }
 
+const std::string getCurrentTime()
+{
+	time_t currentTime = time(0);
+	struct tm timeStruct = *localtime(&currentTime);
+	char buffer[80];
 
+	strftime(buffer, sizeof(buffer), "%d.%m.%Y %X", &timeStruct);
+
+	return std::string(buffer);
+}
+
+void logCreateThread(std::string ThreadName)
+{
+	ofs << "Thread " << ThreadName << " created [" <<
+			getCurrentTime() << "]\n";
+}
+
+void logTerminateThread(std::string ThreadName)
+{
+	ofs << "Thread " << ThreadName << " terminated ["
+	<< getCurrentTime() << "]\n";
+}
 
 /**
  *	push to the threads deque the pair k2 v2
@@ -163,20 +193,7 @@ void pullDataFromMapping()
 			int lockRes = pthread_mutex_lock(&globalMapVecContainers[i].second);
 			checkSysCall2(lockRes);
 
-			MID_ITEM& frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
-//			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
-//			if(it != shuffleMap.end())
-//			{
-//
-//
-//				it->second.push_back(frontPair.second);
-//			}
-//			else
-//			{
-//				std::list<v2Base*> list;
-//				list.push_back(frontPair.second);
-//				shuffleMap.insert(std::pair<k2Base*, std::list<v2Base*>>(frontPair.first, list));
-//			}
+			MID_ITEM& frontPair = globalMapVecContainers[i].first.front();
 
 			shuffleMap[frontPair.first].push_back(frontPair.second);
 
@@ -195,6 +212,16 @@ void pullDataFromMapping()
  */
 void *shuffle(void*)
 {
+	//print create to log
+	int lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
+
+	logCreateThread("Shuffle");
+
+	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes);
+
+	//times for condition
 	int res;
 	struct timespec timeToWait;
 	struct timeval now;
@@ -219,6 +246,17 @@ void *shuffle(void*)
 		pullDataFromMapping();
 	}
 	pullDataFromMapping(); //last iteration after execMap's are done
+
+
+	//print termination to log
+	lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
+
+	logTerminateThread("Shuffle");
+
+	unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes);
+
 	pthread_exit(NULL);
 }
 
@@ -257,13 +295,12 @@ void* execMap(void*)
 {
 	int lockRes = pthread_mutex_lock(&threadCountMutex);
 	checkSysCall2(lockRes);
+
 	tid = threadCount++;
+	logCreateThread("ExecMap");
 
 	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
 	checkSysCall2(unlockRes);
-	/*pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
-	std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
-	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);*/
 
 	std::list<IN_ITEM>::iterator lowerBound, upperBound;
 
@@ -290,6 +327,17 @@ void* execMap(void*)
 	}
 
 	//after all chunks have been mapped
+
+	//print termination to log
+	lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
+
+	logTerminateThread("ExecMap");
+
+	unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes);
+
+
 	pthread_exit(NULL);
 }
 
@@ -298,7 +346,9 @@ void* execReduce(void*)
 {
 	int lockRes = pthread_mutex_lock(&threadCountMutex);
 	checkSysCall2(lockRes);
+
 	tid = threadCount++;
+	logCreateThread("ExecReduce");
 
 	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
 	checkSysCall2(unlockRes);
@@ -323,6 +373,16 @@ void* execReduce(void*)
 
 		}
 	}
+
+	//print termination to log
+	lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
+
+	logTerminateThread("ExecReduce");
+
+	unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes);
+
 	pthread_exit(NULL);
 }
 
@@ -341,7 +401,6 @@ void initializer()
 	threadCount = 0;
 	iterEnd = (*itemsListGlobal).end();
 	itemListIter = (*itemsListGlobal).begin();
-	//std::cout << "input list size: " << (*itemsListGlobal).size() << std::endl; //TODO del
 	keepShuffle = true;
 
 	if (!mappedAndReducedList.empty())
@@ -363,13 +422,12 @@ void mergeReducedContainers()
 	}
 }
 
-/**std::deque<OUT_ITEM>
+/**
  * compare between keys of OUT_ITEM pairs
  */
 bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
 {
 	return (*left.first) < (*right.first);
-	//return left->first < right->first;
 }
 
 
@@ -415,6 +473,21 @@ void prepareForEndOfFramework()
 	shuffleMap.clear();
 }
 
+void initializeLog(timeval& begin)
+{
+	std::string currentWorkDir(__FILE__);
+	std::string logPath =
+			currentWorkDir.substr(0, currentWorkDir.find_last_of("\\/") + 1)
+			+ ".MapReduceFramework.log";
+
+	ofs.open(logPath, std::ofstream::app);
+
+	ofs << "runMapReduceFramework started with " << threadLevel
+	<<  " threads\n";
+
+	gettimeofday(&begin, NULL);
+}
+
 /**
  *
  */
@@ -427,11 +500,14 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 
 	// ***** FIRST PART: INIT ALL VALUES: *****
 
+
 	// initial all global variables according to input
 	mapBase = &mapReduce;
 	threadLevel = multiThreadLevel;
 	itemsListGlobal = &itemsList;
 
+	struct timeval logBegin , logEnd;
+	initializeLog(logBegin);
 
 	// call initializer first so we can run runMapReduceFramework multiple time;
 	initializer();
@@ -469,6 +545,9 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	shuffRes = pthread_join(shuffThread, NULL);
 	checkSysCall(shuffRes);
 
+	gettimeofday(&logEnd, NULL);
+	long long mapShuffleElapsedTime = GET_ELAPSED_TIME;
+
 	//reset threads vector and id's
 	threads.clear();
 	threads.reserve((unsigned long) threadLevel);
@@ -476,6 +555,8 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 
 	//std::cout << "Shuffle map size: " << shuffleMap.size() << std::endl; //TODO del
 	globalShuffledIter = shuffleMap.begin();
+
+	gettimeofday(&logBegin, NULL);
 
 	//start Reduce
 	for (int j = 0; j < threadLevel; ++j)
@@ -494,9 +575,17 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 
 	mergeReducedContainers();
 	mappedAndReducedList.sort(pairCompare);
+
+	gettimeofday(&logEnd, NULL);
+	long long reduceElapsedTime = GET_ELAPSED_TIME;
+	ofs << "Map and Shuffle took " << mapShuffleElapsedTime<< " ns\n";
+	ofs << "Reduce took " << reduceElapsedTime << " ns\n";
 	
 	threads.clear();
 	prepareForEndOfFramework();
+
+	ofs << "runMapReduceFramework finished\n";
+	ofs.close();
 
 	return mappedAndReducedList;
 }
