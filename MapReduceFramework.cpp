@@ -18,6 +18,8 @@
 #include <deque>
 //#include <algorithm>
 #include <pthread.h>
+#include <stdlib.h>
+#include <sys/errno.h>
 
 #define CHUNK 10
 
@@ -90,16 +92,44 @@ std::map<k2Base*, std::list<v2Base*>>::iterator globalShuffledIter;
 
 OUT_ITEMS_LIST mappedAndReducedList;
 
+
+
+void checkSysCall(int res)
+{
+	//TODO maybe not zero instead of neg
+	if (res < 0)
+	{
+		// TODO check if this thing works
+		std::cout << "MapReduceFramework Failure: " << __FUNCTION__ << " failed." << std::endl;
+		exit(1);
+	}
+}
+
+void checkSysCall2(int res)
+{
+	//TODO maybe not zero instead of neg
+	if (res != 0)
+	{
+		// TODO check if this thing works
+		std::cout << "MapReduceFramework Failure: " << __FUNCTION__ << " failed." << std::endl;
+		exit(1);
+	}
+}
+
+
+
 /**
  *	push to the threads deque the pair k2 v2
  */
 void Emit2(k2Base* key, v2Base* val)
 {
-	pthread_mutex_lock(&globalMapVecContainers[tid].second);
 
+	int lockRes = pthread_mutex_lock(&globalMapVecContainers[tid].second);
+	checkSysCall2(lockRes);
 	globalMapVecContainers[tid].first.push_back(std::make_pair(key, val));
 
-	pthread_mutex_unlock(&globalMapVecContainers[tid].second);
+	int unlockRes = pthread_mutex_unlock(&globalMapVecContainers[tid].second);
+	checkSysCall2(unlockRes);
 }
 
 /**
@@ -111,15 +141,8 @@ void Emit3 (k3Base* key, v3Base* val)
 }
 
 
-void checkSysCall(int res)
-{
-	//TODO maybe not zero instead of neg
-	if (res < 0)
-	{
-		std::cout << "error" << std::endl;
-		exit(1);
-	}
-}
+
+
 
 /**
  * go over each threads container and if not empty then
@@ -132,7 +155,8 @@ void pullDataFromMapping()
 		while (!globalMapVecContainers[i].first.empty())
 		{
 			// copy the pointers from the globalMapVecContainers at i and remove them
-			pthread_mutex_lock(&globalMapVecContainers[i].second);
+			int lockRes = pthread_mutex_lock(&globalMapVecContainers[i].second);
+			checkSysCall2(lockRes);
 
 			MID_ITEM& frontPair = globalMapVecContainers[i].first.front(); //TODO maybe we need to pull a pointer?
 //			std::map<k2Base*, std::list<v2Base*>>::iterator it = shuffleMap.find(frontPair.first);
@@ -153,7 +177,8 @@ void pullDataFromMapping()
 
 			globalMapVecContainers[i].first.pop_front();
 
-			pthread_mutex_unlock(&globalMapVecContainers[i].second);
+			int unlockRes = pthread_mutex_unlock(&globalMapVecContainers[i].second);
+			checkSysCall2(unlockRes);
 		}
 	}
 }
@@ -170,7 +195,7 @@ void *shuffle(void*)
 	struct timeval now;
 
 	// get absolute current time
-	gettimeofday(&now, NULL);
+	checkSysCall(gettimeofday(&now, NULL));
 
 	while(keepShuffle)
 	{
@@ -225,10 +250,12 @@ void safeAdvance(T& iter, const T& end)
  */
 void* execMap(void*)
 {
-	pthread_mutex_lock(&threadCountMutex);
+	int lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
 	tid = threadCount++;
-	pthread_mutex_unlock(&threadCountMutex);
 
+	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes)
 	/*pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
 	std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
 	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);*/
@@ -238,11 +265,12 @@ void* execMap(void*)
 	while (itemListIter != iterEnd)
 	{
 		// lock itemListIter of inputVec, increase itemListIter by CHUNK.
-		pthread_mutex_lock(&inputListIterMutex);
+		int lockRes = pthread_mutex_lock(&inputListIterMutex);
+		checkSysCall2(lockRes);
 		lowerBound = itemListIter;
 		//std::cout << "iter b4 adv: " << itemListIter
 		safeAdvance(itemListIter, iterEnd);
-		pthread_mutex_unlock(&inputListIterMutex);
+		checkSysCall2(pthread_mutex_unlock(&inputListIterMutex));
 
 		upperBound = lowerBound;
 		safeAdvance(upperBound, iterEnd);
@@ -252,7 +280,8 @@ void* execMap(void*)
 			mapBase->Map((*lowerBound).first, (*lowerBound).second);
 		}
 		// notify shuffle thread that there is un-empty container
-		pthread_cond_signal(&conditionVar);
+		int unlockRes = pthread_cond_signal(&conditionVar);
+		checkSysCall2(unlockRes);
 	}
 
 	//after all chunks have been mapped
@@ -262,18 +291,23 @@ void* execMap(void*)
 
 void* execReduce(void*)
 {
-	pthread_mutex_lock(&threadCountMutex);
+	int lockRes = pthread_mutex_lock(&threadCountMutex);
+	checkSysCall2(lockRes);
 	tid = threadCount++;
-	pthread_mutex_unlock(&threadCountMutex);
+
+	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
+	checkSysCall2(unlockRes);
 
 	std::map<k2Base*, std::list<v2Base*>>::iterator lowerBound, upperBound;
 
 	while (globalShuffledIter != shuffleMap.end())
 	{
-		pthread_mutex_lock(&shuffledIterMutex);
+		int lockRes = pthread_mutex_lock(&shuffledIterMutex);
+		checkSysCall2(lockRes);
 		lowerBound = globalShuffledIter;
 		safeAdvance(globalShuffledIter, shuffleMap.end());
-		pthread_mutex_unlock(&shuffledIterMutex);
+		int unlockRes = pthread_mutex_unlock(&shuffledIterMutex);
+		checkSysCall2(unlockRes);
 
 		upperBound = lowerBound;
 		safeAdvance(upperBound, shuffleMap.end());
@@ -340,7 +374,6 @@ void destroyMutexAndCond()
 	checkSysCall(res);
 	res = pthread_mutex_destroy(&inputListIterMutex);
 	checkSysCall(res);
-
 	res = pthread_cond_destroy(&conditionVar);
 	checkSysCall(res);
 }

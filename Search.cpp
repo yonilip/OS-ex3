@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sstream>
 #include <dirent.h>
+#include <stdlib.h>
 
 #define THREAD_LEVEL 7
 
@@ -18,6 +19,17 @@ int multiThreadLevel = THREAD_LEVEL;
  global.. need to check it is legit
  **/
 std::string subString;
+
+void searchCheckSysCall(int res)
+{
+    //TODO maybe not zero instead of neg
+    if (res != 0)
+    {
+        std::cout << "error" << std::endl;
+        exit(1);
+    }
+}
+
 
 /**
  * inherits from k1 Base, holds directory name
