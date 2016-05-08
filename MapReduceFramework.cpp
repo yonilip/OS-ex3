@@ -17,7 +17,6 @@
 //#include <unordered_map>
 #include <deque>
 //#include <algorithm>
-#include <pthread.h>
 
 #define CHUNK 10
 
@@ -89,7 +88,7 @@ std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContain
 std::deque<std::deque<OUT_ITEM>> globalReduceContainers;
 
 //std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
-std::map<k2Base*, std::list<v2Base*>> shuffleMap;
+std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
 
 
 bool keepShuffle;
@@ -344,6 +343,11 @@ void initializer()
 	itemListIter = (*itemsListGlobal).begin();
 	//std::cout << "input list size: " << (*itemsListGlobal).size() << std::endl; //TODO del
 	keepShuffle = true;
+
+	if (!mappedAndReducedList.empty())
+	{
+		mappedAndReducedList.clear();
+	}
 }
 
 void mergeReducedContainers()
@@ -365,6 +369,7 @@ void mergeReducedContainers()
 bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
 {
 	return (*left.first) < (*right.first);
+	//return left->first < right->first;
 }
 
 
@@ -374,7 +379,6 @@ bool pairCompare(const OUT_ITEM& left, const OUT_ITEM& right)
  */
 void destroyMutexAndCond()
 {
-	//TODO should we make this more elegant?
 	int res = pthread_mutex_destroy(&timerMutex);
 	checkSysCall(res);
 	res = pthread_mutex_destroy(&threadCountMutex);
@@ -385,6 +389,30 @@ void destroyMutexAndCond()
 	checkSysCall(res);
 	res = pthread_cond_destroy(&conditionVar);
 	checkSysCall(res);
+}
+
+void prepareForEndOfFramework()
+{
+	destroyMutexAndCond();
+	for (int i = 0; i < globalMapVecContainers.size(); ++i)
+	{
+		globalMapVecContainers[i].first.clear();
+		int res = pthread_mutex_destroy(&globalMapVecContainers[i].second);
+		checkSysCall(res);
+	}
+	globalMapVecContainers.clear();
+	for (int j = 0; j < globalReduceContainers.size(); ++j)
+	{
+		globalReduceContainers[j].clear();
+	}
+	globalReduceContainers.clear();
+	std::map<k2Base *, std::list<v2Base *>, shuffleComp>::iterator
+			it = shuffleMap.begin();
+	for ( ; it != shuffleMap.end() ; ++it)
+	{
+		it->second.clear();
+	}
+	shuffleMap.clear();
 }
 
 /**
@@ -466,10 +494,9 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 
 	mergeReducedContainers();
 	mappedAndReducedList.sort(pairCompare);
-	//std::sort(mappedAndReducedList.begin(), mappedAndReducedList.end(),
-	//		  pairCompare);
-
-	destroyMutexAndCond();
+	
+	threads.clear();
+	prepareForEndOfFramework();
 
 	return mappedAndReducedList;
 }
