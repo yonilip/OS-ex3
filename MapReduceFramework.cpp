@@ -18,8 +18,6 @@
 #include <deque>
 //#include <algorithm>
 #include <pthread.h>
-#include <stdlib.h>
-#include <sys/errno.h>
 
 #define CHUNK 10
 
@@ -40,6 +38,12 @@ struct shuffleComp{
 		return (*first)<(*second);
 	}
 };
+
+/*bool shuffleComp(const k2Base& left, const k2Base& right)
+{
+	return (left) < (right);
+}*/
+
 
 
 
@@ -84,7 +88,9 @@ std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContain
 
 std::deque<std::deque<OUT_ITEM>> globalReduceContainers;
 
-std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
+//std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
+std::map<k2Base*, std::list<v2Base*>> shuffleMap;
+
 
 bool keepShuffle;
 
@@ -255,7 +261,7 @@ void* execMap(void*)
 	tid = threadCount++;
 
 	int unlockRes = pthread_mutex_unlock(&threadCountMutex);
-	checkSysCall2(unlockRes)
+	checkSysCall2(unlockRes);
 	/*pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
 	std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
 	globalMapVecContainers[tid] = std::make_pair(threadVec, threadMutex);*/
@@ -315,6 +321,7 @@ void* execReduce(void*)
 		for (; lowerBound != upperBound; ++lowerBound)
 		{
 			mapBase->Reduce((*lowerBound).first, (*lowerBound).second);
+
 		}
 	}
 	pthread_exit(NULL);
@@ -330,6 +337,8 @@ void initializer()
 	timerMutex = PTHREAD_MUTEX_INITIALIZER;
 	conditionVar = PTHREAD_COND_INITIALIZER;
 	threadCountMutex = PTHREAD_MUTEX_INITIALIZER;
+	inputListIterMutex = PTHREAD_MUTEX_INITIALIZER;
+	shuffledIterMutex = PTHREAD_MUTEX_INITIALIZER;
 	threadCount = 0;
 	iterEnd = (*itemsListGlobal).end();
 	itemListIter = (*itemsListGlobal).begin();
