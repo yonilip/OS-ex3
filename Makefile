@@ -19,7 +19,7 @@ Search.o : Search.cpp
 	${CC} ${CFLAGS} MapReduceFramework.cpp -c
 
 clean :
-	rm -f  Search *.o *.a *.log ex3.tar
+	rm -f  Search *.o *.a .MapReduceFramework.log ex3.tar
 
 valgrind : main
 	valgrind --leak-check=full --show-possibly-lost=yes --show-reachable=yes --undef-value-errors=yes
