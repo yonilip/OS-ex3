@@ -22,7 +22,6 @@ std::string subString;
 
 void searchCheckSysCall(int res)
 {
-    //TODO maybe not zero instead of neg
     if (res != 0)
     {
         std::cout << "error" << std::endl;
@@ -47,7 +46,6 @@ public:
     }
 };
 
-//TODO does it matter if its not null as the given example on the ex description?
 class DirVal : public v1Base
 {
 public:
@@ -60,7 +58,6 @@ public:
  * same implementation as DirNameKey
  */
 
-//TODO check if multiple inheritence is allwed, does it get the wanted result in this case?
 class FileName2 : public k2Base
 {
 public:
@@ -138,7 +135,8 @@ class SubStringMapReduce : public MapReduceBase
                         ss >> s;
 						FileName2* fileName = new FileName2(s);
                         FileValue* fileVal = new FileValue();
-                        destroyContainerK2.push_back(std::make_pair(fileName, fileVal));
+                        destroyContainerK2.push_back(std::make_pair(fileName,
+                                                                    fileVal));
                         Emit2((k2Base*)fileName, (v2Base*)fileVal);
                         //TODO check where to delete
                     }
@@ -186,7 +184,7 @@ int main(int argc, char* argv[])
         std::string str = argv[i];
         DirNameKey* key = new DirNameKey(str);
         DirVal* val = new DirVal();
-        directories.push_back(std::make_pair((k1Base*) key,(v1Base*) val)); //TODO does deleting the contents of this delete key and val?
+        directories.push_back(std::make_pair((k1Base*) key,(v1Base*) val));
     }
 
 	SubStringMapReduce searchMapReduce;
@@ -203,7 +201,6 @@ int main(int argc, char* argv[])
             std::cout << file->fileName << std::endl;
         }
     }
-    //TODO is it enough to use clear? should we iterate and actually delete each pointer?
 
     for(IN_ITEM item1 : directories)
     {
@@ -213,13 +210,12 @@ int main(int argc, char* argv[])
     directories.clear();
     for(OUT_ITEM item2 : result)
     {
-        //delete(item2.first); // TODO not deleting this but allowing it to be del'd in destroyContainerK2 should delete all allocated
         delete(item2.second);
     }
     result.clear();
     for (std::pair<FileName2*, FileValue*> item3 : destroyContainerK2)
     {
-        if(item3.first != nullptr){ //TODO make sure duplicate k2's are del'd
+        if(item3.first != nullptr){
             delete(item3.first);
         }
         if (item3.second != nullptr)

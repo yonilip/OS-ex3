@@ -92,7 +92,8 @@ pthread_mutex_t threadCountMutex;
 /**
  * contains execMap containers and matching mutex to each container
  */
-std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContainers;
+std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>>
+		globalMapVecContainers;
 
 /**
  * queue of queques, contains all the containers for exec reduce threads
@@ -100,7 +101,8 @@ std::deque<std::pair<std::deque<MID_ITEM>, pthread_mutex_t>> globalMapVecContain
 std::deque<std::deque<OUT_ITEM>> globalReduceContainers;
 
 /**
- * map k2Base keys to this list of valures after values being mapped by execMap threads
+ * map k2Base keys to this list of valures after values being mapped by
+ * execMap threads
  */
 std::map<k2Base*, std::list<v2Base*>, shuffleComp> shuffleMap;
 
@@ -133,11 +135,10 @@ std::ofstream ofs;
  */
 void checkSysCall(int res, std::string funcName)
 {
-	//TODO maybe not zero instead of neg
 	if (res < 0)
 	{
-		// TODO check if this thing works
-		std::cout << "MapReduceFramework Failure: " << __FUNCTION__ << " failed." << std::endl;
+		std::cout << "MapReduceFramework Failure: " << funcName
+		<< " failed." << std::endl;
 		exit(1);
 	}
 }
@@ -147,11 +148,10 @@ void checkSysCall(int res, std::string funcName)
  */
 void checkSysCall2(int res, std::string funcName)
 {
-	//TODO maybe not zero instead of neg
 	if (res != 0)
 	{
-		// TODO check if this thing works
-		std::cout << "MapReduceFramework Failure: " << __FUNCTION__ << " failed." << std::endl;
+		std::cout << "MapReduceFramework Failure: " << funcName
+		<< " failed." << std::endl;
 		exit(1);
 	}
 }
@@ -195,11 +195,11 @@ void Emit2(k2Base* key, v2Base* val)
 {
 
 	int lockRes = pthread_mutex_lock(&globalMapVecContainers[tid].second);
-	checkSysCall2(lockRes, __FUNCTION__);
+	checkSysCall2(lockRes, "pthread_mutex_lock");
 	globalMapVecContainers[tid].first.push_back(std::make_pair(key, val));
 
 	int unlockRes = pthread_mutex_unlock(&globalMapVecContainers[tid].second);
-	checkSysCall2(unlockRes, __FUNCTION__);
+	checkSysCall2(unlockRes, "pthread_mutex_lock");
 }
 
 /**
@@ -220,8 +220,10 @@ void pullDataFromMapping()
 	{
 		while (!globalMapVecContainers[i].first.empty())
 		{
-			// copy the pointers from the globalMapVecContainers at i and remove them
-			int lockRes = pthread_mutex_lock(&globalMapVecContainers[i].second);
+			// copy the pointers from the globalMapVecContainers at i and
+			// remove them
+			int lockRes =
+					pthread_mutex_lock(&globalMapVecContainers[i].second);
 			checkSysCall2(lockRes, "pthread_mutex_lock");
 
 			MID_ITEM& frontPair = globalMapVecContainers[i].first.front();
@@ -230,8 +232,9 @@ void pullDataFromMapping()
 
 			globalMapVecContainers[i].first.pop_front();
 
-			int unlockRes = pthread_mutex_unlock(&globalMapVecContainers[i].second);
-			checkSysCall2(unlockRes, __FUNCTION__);
+			int unlockRes =
+					pthread_mutex_unlock(&globalMapVecContainers[i].second);
+			checkSysCall2(unlockRes, "pthread_mutex_unlock");
 		}
 	}
 }
@@ -332,7 +335,8 @@ void* execMap(void*)
 		checkSysCall2(lockRes, "pthread_mutex_lock");
 		lowerBound = itemListIter;
 		safeAdvance(itemListIter, iterEnd);
-		checkSysCall2(pthread_mutex_unlock(&inputListIterMutex), "pthread_mutex_unlock");
+		checkSysCall2(pthread_mutex_unlock(&inputListIterMutex),
+					  "pthread_mutex_unlock");
 
 		upperBound = lowerBound;
 		safeAdvance(upperBound, iterEnd);
@@ -540,17 +544,17 @@ OUT_ITEMS_LIST runMapReduceFramework(MapReduceBase &mapReduce,
 	struct timeval logBegin , logEnd;
 	initializeLog(logBegin);
 
-	// call initializer first so we can run runMapReduceFramework multiple time;
+	// call initializer first so we can run runMapReduceFramework multiple time
 	initializer();
 
 	// ***** SECOND PART: CREATING ALL EXECMAP THREADS *****
 	std::vector<pthread_t> threads((unsigned long) threadLevel);
 
 	// create all execMap threads
-	for(int i = 0; i < threadLevel ; ++i) //TODO is 2nd eval needed?
+	for(int i = 0; i < threadLevel ; ++i)
 	{
-		pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER; //TODO destroy this
-		std::deque<MID_ITEM> threadVec; //TODO check that shuffle wont try to access dast b4 first emit
+		pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
+		std::deque<MID_ITEM> threadVec;
 		globalMapVecContainers.push_back(std::make_pair(threadVec,
 														threadMutex));
 
